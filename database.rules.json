@@ -14,6 +14,13 @@
           "joinedAt": { ".validate": "newData.isNumber()" },
           "inst": { ".validate": "newData.isString()" },
           "conn": { "$inst": { ".validate": "newData.val() === true" } },
+          "char": {
+            "c": { ".validate": "newData.isNumber()" },
+            "hair": { ".validate": "newData.isNumber()" },
+            "face": { ".validate": "newData.isNumber()" },
+            "acc": { ".validate": "newData.isNumber()" },
+            "$x": { ".validate": false }
+          },
           "$other": { ".validate": false }
         }
       },

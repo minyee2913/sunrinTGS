@@ -1,5 +1,5 @@
 // 통신 계층. Firebase Realtime Database와 로컬 테스트용(같은 브라우저 탭끼리) 구현이 같은 모양을 가진다.
-//   on(path, cb) → 구독 해제 함수     get(path)     set(path, v)
+//   on(path, cb, onErr) → 구독 해제 함수     get(path)     set(path, v)
 //   update({ 'a/b': v, ... })          transaction(path, fn) → 반영 여부
 //   presence(path) → 접속 중에만 path=true, 해제 함수 반환
 //   now() → 서버 기준 시각(ms)
@@ -34,12 +34,16 @@ async function firebaseNet() {
     mode: 'firebase',
     uid: user.uid,
     now: () => Date.now() + offset,
-    on: (path, cb) => D.onValue(r(path), s => cb(s.val()), e => console.error('구독 실패', path, e)),
+    on: (path, cb, onErr) => D.onValue(r(path), s => cb(s.val()), e => {
+      console.warn('구독 실패', path, e.message);
+      onErr?.(e);
+    }),
     get: async path => (await D.get(r(path))).val(),
     set: (path, v) => D.set(r(path), v),
     update: up => D.update(r(''), up),
     async transaction(path, fn) {
-      const res = await D.runTransaction(r(path), cur => fn(cur));
+      // 서버가 받아들인 뒤에만 반영되도록 (권한이 아직 없는데 호스트로 동작하지 않게)
+      const res = await D.runTransaction(r(path), cur => fn(cur), { applyLocally: false });
       return res.committed;
     },
     presence(path) {

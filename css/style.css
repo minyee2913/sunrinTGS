@@ -114,12 +114,16 @@ code { background: rgba(255,255,255,.12); padding: 1px 5px; border-radius: 4px; 
   display: grid; place-items: center; font-family: var(--title); font-size: max(14px, calc(var(--cw) * .17));
   background: var(--accent); color: var(--accent-ink); box-shadow: 0 2px 0 rgba(0,0,0,.35), 0 0 0 2px #fff;
 }
-.card .art { height: 40%; flex: none; border-radius: calc(var(--cw) * .06); background: rgba(0,0,0,.22); display: grid; place-items: center; overflow: hidden; }
-.card .art img { width: 100%; height: 100%; object-fit: cover; }
+.card .art { position: relative; height: 56%; flex: none; border-radius: calc(var(--cw) * .06); background: rgba(0,0,0,.28); display: grid; place-items: center; overflow: hidden; }
+.card .art img { width: 100%; height: 100%; object-fit: cover; object-position: 50% 30%; pointer-events: none; }
 .card .emoji { font-size: calc(var(--cw) * .34); line-height: 1; filter: drop-shadow(0 2px 2px rgba(0,0,0,.3)); }
-.card .cname { font-family: var(--title); font-size: max(11px, calc(var(--cw) * .115)); line-height: 1.1; text-shadow: 0 1px 2px rgba(0,0,0,.4); word-break: keep-all; }
+.card .cname {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: calc(var(--cw) * .1) calc(var(--cw) * .04) calc(var(--cw) * .025);
+  background: linear-gradient(transparent, rgba(0,0,0,.78)); text-align: center;
+  font-family: var(--title); font-size: max(11px, calc(var(--cw) * .115)); line-height: 1.1; text-shadow: 0 1px 3px rgba(0,0,0,.8); word-break: keep-all;
+}
 .card .ctype { font-size: max(8px, calc(var(--cw) * .072)); opacity: .85; font-weight: 600; }
-.card .ctext { flex: 1; background: rgba(255,255,255,.93); color: #24203f; border-radius: calc(var(--cw) * .05); padding: calc(var(--cw) * .04); font-size: max(9px, calc(var(--cw) * .085)); line-height: 1.3; font-weight: 600; word-break: keep-all; overflow: hidden; }
+.card .ctext { flex: 1; background: rgba(255,255,255,.93); color: #24203f; border-radius: calc(var(--cw) * .05); padding: calc(var(--cw) * .035) calc(var(--cw) * .04); font-size: max(9px, calc(var(--cw) * .08)); line-height: 1.25; font-weight: 600; word-break: keep-all; overflow: hidden; }
 .card.hidden .ctext { color: #5b4a99; }
 .card.big { --cw: min(22vw, 25vh, 200px); }
 .card.mid { --cw: min(14vw, 24vh, 150px); }
@@ -248,6 +252,7 @@ code { background: rgba(255,255,255,.12); padding: 1px 5px; border-radius: 4px; 
 .modal-head h2 { margin: 0; font-size: 18px; }
 .modal-body { overflow-y: auto; padding: 4px 16px 16px; }
 .modal-body h3 { margin: 14px 0 8px; color: var(--accent); font-size: 15px; }
+.modal-body h3 small { color: var(--muted); font-weight: 600; margin-left: 4px; }
 .modal-body .grid { display: flex; flex-wrap: wrap; gap: 8px; }
 .modal-body .card { --cw: min(28vw, 130px); }
 .blocker { position: fixed; inset: 0; z-index: 30; background: rgba(8,6,20,.8); display: grid; place-items: center; padding: 16px; }
