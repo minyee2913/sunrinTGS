@@ -21,6 +21,7 @@ const S = {
   meta: {}, lobby: {}, pub: null, priv: null,
   joined: false, presenceOff: null,
   host: null, hostOffSince: null, claiming: false, handing: null, voteCancel: false, voteClosing: null,
+  chatOpen: false, chatSeen: 0, chatLastT: null, chatLast: {},
   sel: null, pickSel: null, removeSel: null, pickKey: '',
   pending: null, pendingAt: 0, hiddenU: null,
   modal: null, fxSeen: -1, fxGame: null, lastCur: undefined, pendingFlash: false,
@@ -42,6 +43,7 @@ const charOf = u => {
   const c = S.pub?.players[u]?.char;
   if (validChar(c)) return c;
   if (u === S.uid && S.myChar) return S.myChar;
+  if (validChar(S.meta.chars?.[u])) return S.meta.chars[u];
   return validChar(S.lobby[u]?.char) ? S.lobby[u].char : defaultChar(u);
 };
 const ava = (u, extra = '') => avatarHTML(u, name(u), extra, charOf(u));
@@ -71,6 +73,7 @@ async function boot() {
     // 내 투표가 닫혔는데 호스트가 되지 않았으면 통과하지 못한 것 (직접 취소한 경우 제외)
     else if (mine && !S.meta.vote && now !== S.uid && !S.voteCancel) toast('호스트 요청이 과반수 찬성을 얻지 못했어요');
     if (!S.meta.vote) S.voteCancel = false;
+    onChat();
     update();
   });
   S.net.on('lobby', v => { S.lobby = v || {}; update(); });
@@ -104,6 +107,7 @@ async function boot() {
   });
   document.addEventListener('keydown', e => {
     if (e.key === 'Enter' && e.target.id === 'nick') doJoin();
+    if (e.key === 'Enter' && e.target.id === 'chatIn' && !e.isComposing) { e.preventDefault(); sendChat(); }
     if (e.key === 'Escape') { S.sel = null; S.modal = null; render(); }
   });
   setInterval(onTick, 250);
@@ -124,10 +128,13 @@ async function join(nick) {
   saveChar();
 }
 
-// 캐릭터는 따로 저장한다 (보안 규칙이 아직 char를 모르면 이 쓰기만 실패하고 참가는 그대로 된다)
+// 캐릭터는 따로 저장한다. 게시된 보안 규칙이 lobby/char를 모르면 그 쓰기는 실패하므로,
+// 호스트에게도 보내서 meta/chars에 남긴다 (게임을 만들 때 호스트는 이 값을 쓴다).
 function saveChar() {
   store.set('hp_char_' + S.uid, JSON.stringify(S.myChar));
-  if (S.joined) S.net.set(`lobby/${S.uid}/char`, S.myChar).catch(e => console.warn('캐릭터 저장 실패', e.message));
+  if (!S.joined) return;
+  S.net.set(`lobby/${S.uid}/char`, S.myChar).catch(e => console.warn('캐릭터 저장 실패', e.message));
+  if (S.meta.hostId) sendHostReq('char', { c: S.myChar });
 }
 
 async function leave() {
@@ -150,6 +157,7 @@ function update() {
   hostDuty();
   voteDuty();
   renderVote();
+  renderChat();
   checkAck();
   // 게임이 끝나거나 바뀌면 재생 중인 전투 연출을 바로 멈춘다 (대기실로 못 돌아가는 일이 없게)
   if (S.replay && (S.meta.status !== 'playing' || S.pub?.gameId !== S.replayGame)) S.replay.stop();
@@ -255,8 +263,23 @@ function voteTally(v) {
 
 // 호스트 탭: 받은 호스트 요청·투표 처리 (Host 처리 줄 안에서 불리므로 넘기기는 기다리지 않고 따로 시작한다)
 function onHostReq(uid, r) {
+  // 캐릭터는 막 참가해서 아직 접속 표시가 안 보이는 사람 것도 받는다
+  if (r.type === 'char') {
+    if (S.host && S.lobby[uid]?.name && validChar(r.c)) S.net.update({ [`meta/chars/${uid}`]: { c: r.c.c, hair: r.c.hair, face: r.c.face, acc: r.c.acc } });
+    return;
+  }
   if (!S.host || S.handing || !isOnline(S.lobby[uid])) return;
   const v = liveVote();
+  if (r.type === 'chat') {
+    const m = String(r.m || '').trim().slice(0, CHAT_MAX);
+    const now = S.net.now();
+    if (!m || now - (S.chatLast[uid] || 0) < 600) return; // 연타 제한
+    S.chatLast[uid] = now;
+    const up = { [`meta/chat/${rid()}`]: { u: uid, n: S.lobby[uid].name, m, t: now } };
+    const old = chatList();
+    for (const c of old.slice(0, Math.max(0, old.length + 1 - CHAT_KEEP))) up[`meta/chat/${c.id}`] = null;
+    return S.net.update(up);
+  }
   if (r.type === 'hostReq') {
     if (uid === S.uid || v) return;
     if (onlineMembers().length <= 2) return void setTimeout(() => handOver(uid));
@@ -346,6 +369,80 @@ function hostModalHTML() {
        <button class="btn primary cut" data-act="hostReq" ${liveVote() ? 'disabled' : ''}><b>${liveVote() ? '투표 진행 중' : '호스트 요청'}</b></button>`;
   return `<div class="modal"><div class="modal-box host-modal"><div class="modal-head"><div class="stack">${lbl('HOST', 'amber')}<h2>${amHost ? '호스트 넘기기' : '호스트 요청'}</h2></div><button class="btn ghost" data-act="close">닫기</button></div>
     <div class="modal-body">${body}</div></div></div>`;
+}
+
+// ── 채팅 ──
+// 메시지는 행동 요청(req)으로 호스트에게 보내고, 호스트가 meta/chat에 최근 메시지를 남긴다 (보안 규칙 추가 없이 동작).
+// 창은 화면과 따로 그려서 입력 중인 글자가 지워지지 않게 한다.
+const CHAT_KEEP = 30, CHAT_MAX = 80;
+const chatList = () => Object.entries(S.meta.chat || {}).map(([id, c]) => ({ id, ...c })).sort((a, b) => a.t - b.t);
+const chatUnread = () => (S.chatOpen ? 0 : chatList().filter(c => c.t > S.chatSeen && c.u !== S.uid).length);
+
+function sendChat() {
+  const inp = $('#chatIn');
+  const m = (inp?.value || '').trim().slice(0, CHAT_MAX);
+  if (!m || !S.joined) return;
+  if (!isOnline(S.lobby[S.meta.hostId])) return toast('호스트가 연결돼 있지 않아 보낼 수 없어요');
+  sendHostReq('chat', { m });
+  inp.value = '';
+}
+
+// 새 메시지: 창이 닫혀 있으면 말풍선으로 (게임 중이면 말한 캐릭터 머리 위)
+function onChat() {
+  const list = chatList();
+  const last = list.at(-1)?.t ?? 0;
+  if (S.chatLastT === null) { S.chatLastT = last; S.chatSeen = last; return; } // 접속 전 메시지는 알리지 않는다
+  const fresh = list.filter(c => c.t > S.chatLastT);
+  S.chatLastT = Math.max(S.chatLastT, last);
+  if (S.chatOpen) S.chatSeen = S.chatLastT;
+  for (const c of fresh) {
+    if (c.u !== S.uid && !S.chatOpen) chatBubble(c);
+    if (c.u !== S.uid) sfx.pickup();
+  }
+  if (fresh.length) lastHTML = ''; // 상단 CHAT 배지 갱신
+}
+
+function chatBubble(c) {
+  const el = document.createElement('div');
+  const f = screen() === 'battle' && $(`.fighter[data-u="${c.u}"] .f-body`);
+  if (f) {
+    const r = f.getBoundingClientRect();
+    el.className = 'say';
+    el.style.left = `${r.left + r.width / 2}px`;
+    el.style.top = `${r.top}px`;
+  } else {
+    el.className = 'say corner';
+    el.innerHTML = '<b></b>';
+    el.querySelector('b').textContent = c.n;
+  }
+  el.append(document.createTextNode(c.m));
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3600);
+}
+
+let lastChatList = '';
+function renderChat() {
+  const root = $('#chat');
+  if (!root || !S.ready) return;
+  if (!S.joined || !S.chatOpen) {
+    if (root.innerHTML) { root.innerHTML = ''; lastChatList = ''; }
+    return;
+  }
+  if (!root.firstChild) {
+    root.innerHTML = `<div class="chat-box">
+      <div class="chat-head">${lbl('CHAT', 'amber')}<button class="link-btn small" data-act="chat">닫기</button></div>
+      <ul class="chat-list"></ul>
+      <div class="chat-form"><input id="chatIn" maxlength="${CHAT_MAX}" placeholder="메시지 입력" autocomplete="off" enterkeyhint="send"><button class="btn primary" data-act="chatSend">보내기</button></div>
+    </div>`;
+    lastChatList = '';
+  }
+  const html = chatList().map(c => `<li class="${c.u === S.uid ? 'me' : ''}"><b>${esc(c.n)}</b><span>${esc(c.m)}</span></li>`).join('') || '<li class="dim small">아직 메시지가 없어요</li>';
+  if (html !== lastChatList) {
+    const ul = root.querySelector('.chat-list');
+    ul.innerHTML = html;
+    ul.scrollTop = ul.scrollHeight;
+    lastChatList = html;
+  }
 }
 
 // ── 행동 요청 ──
@@ -585,6 +682,13 @@ function onClick(e) {
       return;
     case 'start': return startGame();
     case 'hostMenu': S.modal = 'host'; return render();
+    case 'chat':
+      S.chatOpen = !S.chatOpen;
+      S.chatSeen = S.chatLastT ?? 0;
+      renderChat();
+      if (S.chatOpen) $('#chatIn')?.focus();
+      return render(true);
+    case 'chatSend': return sendChat();
     case 'hostReq':
       requestHost();
       if (S.modal === 'host') S.modal = null;
@@ -736,6 +840,7 @@ const lbl = (t, cls = '') => `<span class="lbl ${cls}">${t}</span>`;
 const pad2 = n => String(n).padStart(2, '0');
 
 const toggles = () => `<div class="toggles">
+  ${S.joined ? `<button class="tg chat-tg ${S.chatOpen ? 'on' : ''}" data-act="chat" title="채팅">CHAT${chatUnread() ? `<em>${Math.min(99, chatUnread())}</em>` : ''}</button>` : ''}
   <button class="tg ${isMuted() ? 'off' : ''}" data-act="mute" title="효과음">SFX</button>
   <button class="tg ${music.isOn() && !isMuted() ? '' : 'off'}" data-act="music" title="배경음악">BGM</button>
 </div>`;
@@ -775,6 +880,11 @@ function entryHTML() {
         <div class="join-row">
           <input id="nick" maxlength="10" placeholder="닉네임 입력" autocomplete="off" value="${esc(store.get('hp_name') || '')}">
           <button class="btn primary cut" data-act="join"><b>참가하기</b><span class="mono">→</span></button>
+        </div>
+        <div class="t-char">
+          <div class="t-char-now">${charSVG(S.myChar)}</div>
+          <div class="stack">${lbl('CHARACTER')}<b>${esc(CHARACTERS[S.myChar.c].name)}</b><button class="link-btn small" data-act="charRandom">무작위</button></div>
+          <div class="t-cast">${CHARACTERS.map((ch, i) => `<button type="button" class="t-cast-opt ${S.myChar.c === i ? 'selected' : ''}" data-act="charSelect" data-index="${i}" title="${esc(ch.name)}" aria-label="${esc(ch.name)} 선택" aria-pressed="${S.myChar.c === i}">${charSVG({ c: i, hair: 0, face: 0, acc: 0 })}</button>`).join('')}</div>
         </div>
         <div class="t-status">
           <span><i class="sq ${playing ? 'live' : ''}"></i>${playing ? '게임 진행 중 · 지금 들어가면 관전' : `대기실 <b class="mono">${n}</b>명 · 서버 정상`}</span>
