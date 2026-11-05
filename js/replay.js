@@ -1,22 +1,28 @@
 // 턴 종료 전투 연출. 필드에 서 있는 캐릭터들이 엔진이 기록한 replay.plays(카드 묶음과 그 안의 효과 fx)대로 직접 싸운다.
-// 건너뛸 수 없다. 대신 기본 1.5배속이고, 카드가 많으면 정해진 시간(replayMs) 안에 끝나도록 더 빨라진다.
-import { CURSE } from './cards.js';
+// 건너뛸 수 없다. 대신 기본 1.4배속이고, 카드가 많으면 정해진 시간(replayMs) 안에 끝나도록 더 빨라진다.
+// 연출: 레터박스·비네트, 카드마다 컷인, 대시 잔상, 히트스톱·카메라 펀치·집중선, 연타 카운터, 치명타 임팩트 프레임, 턴 합계.
+import { CARDS, CURSE } from './cards.js';
+import { cardName } from './editor.js';
 import { cardHTML, hiddenCardHTML } from './view.js';
 import { replayMs } from './engine.js';
 import * as V from './vfx.js';
 import { sfx } from './sfx.js';
 import { createMotion } from './motion.js';
 
-const STEP = { dmg: 380, ko: 1300, trigger: 420, block: 280, heal: 320, react: 320, nullify: 260, strip: 260, unreact: 280, debuff: 280, gimmick: 300 };
-const CARD_MS = 800; // 낸 카드를 크게 보여주는 시간
-const groupMs = g => CARD_MS + 140 + g.fx.reduce((a, f) => a + (STEP[f.k] || 260), 0) + 240;
+const STEP = { dmg: 440, ko: 1600, trigger: 440, block: 300, heal: 340, react: 320, nullify: 280, strip: 280, unreact: 280, debuff: 280, gimmick: 300 };
+const CARD_MS = 1050; // 카드 컷인 시간
+const CRIT = 10;      // 이 피해부터 치명타 연출
+const TOTAL_MS = 750; // 마지막 턴 합계
+const TYPE_NAME = { atk: '공격', def: '방어', skill: '기술', react: '반응', curse: '저주' };
+const groupMs = g => CARD_MS + 140 + g.fx.reduce((a, f) => a + (STEP[f.k] || 260) + (f.k === 'dmg' && f.v >= CRIT ? 380 : 0), 0) + 240;
 
 export function playReplay(rep, { field, shakeEl, players, nameOf }) {
   let done;
   const finished = new Promise(r => { done = r; });
   let stopped = false;
-  const natural = rep.plays.reduce((a, g) => a + groupMs(g), 0);
-  const speed = Math.min(1 / 1.5, Math.max(.12, (replayMs(rep.plays) - 150) / natural));
+  const natural = rep.plays.reduce((a, g) => a + groupMs(g), 0) + TOTAL_MS;
+  const speed = Math.min(1 / 1.4, Math.max(.12, (replayMs(rep.plays) - 150) / natural));
+  let hits = { n: 0, dmg: 0 }, turnDmg = 0;
   const motion = createMotion({ speed });
   const reduced = () => globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   const wait = ms => (stopped ? Promise.resolve() : new Promise(r => setTimeout(r, ms * speed)));
@@ -52,7 +58,9 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
       return;
     }
     sfx.dash();
+    sfx.whoosh();
     V.puff(ca.x, ca.r.bottom - 10);
+    V.streak(ca.x, ca.y, cb.x, cb.y);
     await moveTo(a, cb.x - ca.x - dir * cb.r.width * .8, (cb.r.bottom - ca.r.bottom) * .5, 210, 'cubic-bezier(.5,0,.9,.4)');
   };
   const retreat = async a => {
@@ -76,12 +84,28 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
     const { x, y } = center(el);
     const dir = srcEl ? Math.sign(x - center(srcEl).x) || 1 : 1;
     if (f.v > 0) {
+      const crit = f.v >= CRIT;
+      // 히트스톱: 맞는 순간 하얀 실루엣
+      el.querySelector('.f-body')?.animate([{ filter: 'brightness(5) saturate(0)' }, { filter: 'brightness(5) saturate(0)', offset: .4 }, { filter: 'none' }], { duration: 150 + f.v * 8 });
       V.impact(x, y, f.v);
-      V.shake(shakeEl, Math.min(22, 4 + f.v * 1.1), 260 + f.v * 12);
-      V.text(x, y - 40, `-${f.v}`, `f-dmg ${f.v >= 10 ? 'big' : ''}`);
+      V.rays(x, y, { n: 12 + f.v * 2, colors: crit ? ['#fff', '#ffd23f', '#ff3b5c'] : ['#fff', '#ffe2b0'], r1: 50 + f.v * 3, life: 300 + f.v * 12 });
+      V.camera(field, x, y, 1.03 + Math.min(.1, f.v * .007), 260 + f.v * 12);
+      V.shake(shakeEl, Math.min(26, 5 + f.v * 1.3), 280 + f.v * 14);
+      V.text(x, y - 40, `-${f.v}`, `f-dmg ${crit ? 'big' : ''}`);
       knock(el, dir, Math.min(1, f.v / 14));
       sfx.hit(f.v);
-      if (f.v >= 10) V.flash('rgba(255,255,255,.35)', 160);
+      if (crit && !hits.crit) {
+        hits.crit = true; // 광역 공격이어도 카드 한 장에 한 번만
+        V.impactFrame(90);
+        V.bigWord('CRITICAL!', 'crit', 900);
+        V.flash('rgba(255,255,255,.5)', 220);
+        V.shards(x, y, { n: 14, size: 7, colors: ['#ffd23f', '#fff'] });
+        sfx.crit();
+      }
+      hits.n++;
+      hits.dmg += f.v;
+      turnDmg += f.v;
+      if (hits.n > 1) V.combo(hits.n, hits.dmg);
     } else {
       motion.play(el, 'guard');
       V.ring(x, y, { color: '#7cc4ff', r1: 70, w: 8 });
@@ -105,18 +129,39 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
   field.classList.add('replaying');
 
   const showBanner = (g, actorEl) => {
-    if (g.k === 'sudden') banner.innerHTML = '<div class="sudden-banner">라운드 종료 피해</div>';
-    else if (g.k === 'start') banner.innerHTML = `<div class="sudden-banner start">${nameOf(g.by)}의 턴 시작 효과</div>`;
-    else if (g.k === 'curse') banner.innerHTML = cardHTML(g.id || CURSE, { act: '', size: 'mid' });
-    else banner.innerHTML = g.id ? cardHTML(g.id, { act: '', size: 'mid' }) : hiddenCardHTML('mid');
     const fr = field.getBoundingClientRect();
     const x = actorEl ? center(actorEl).x - fr.left : fr.width / 2;
     const left = Math.min(fr.width - 70, Math.max(70, x));
+    const T = CARD_MS * speed;
+    if (g.k === 'card' || g.k === 'curse') {
+      // 화면을 가로지르는 컷인을 보여준 뒤, 사용한 캐릭터 머리 위에 카드를 작게 남긴다
+      const id = g.k === 'curse' ? g.id || CURSE : g.id;
+      const c = id && CARDS[id];
+      V.cutIn({
+        art: c ? `img/cards/${c.photo}.webp` : null,
+        name: c ? cardName(id) : '반응 카드',
+        sub: `${g.by ? nameOf(g.by) : ''} · ${c ? `${TYPE_NAME[c.type]} 카드` : '숨겨진 카드'}`,
+        type: c?.type || 'react',
+        flip: !!actorEl?.classList.contains('r'),
+        ms: T * .8,
+      });
+      sfx.cutin();
+      banner.innerHTML = c ? cardHTML(id, { act: '', size: 'mid' }) : hiddenCardHTML('mid');
+      banner.style.left = `${left}px`;
+      banner.animate([
+        { transform: 'translate(-50%, -30%) scale(.3)', opacity: 0, offset: 0 },
+        { transform: 'translate(-50%, -30%) scale(.3)', opacity: 0, offset: .74 },
+        { transform: 'translate(-50%, 0) scale(1.15)', opacity: 1, offset: .88 },
+        { transform: 'translate(-50%, 0) scale(1)', opacity: 1, offset: 1 },
+      ], { duration: T, easing: 'cubic-bezier(.3,1.4,.4,1)', fill: 'forwards' });
+      return;
+    }
+    if (g.k === 'sudden') banner.innerHTML = '<div class="sudden-banner">라운드 종료 피해</div>';
+    else if (g.k === 'start') banner.innerHTML = `<div class="sudden-banner start">${nameOf(g.by)}의 턴 시작 효과</div>`;
     banner.style.left = `${left}px`;
     // 필드 가운데에서 크게 튀어나왔다가, 잠깐 보여준 뒤 사용한 캐릭터 머리 위로 작아지며 이동
     const dx = fr.width / 2 - left;
     const big = Math.min(1.9, (fr.height * .92) / Math.max(1, banner.getBoundingClientRect().height || 1));
-    const T = CARD_MS * speed;
     banner.animate([
       { transform: `translate(calc(-50% + ${dx}px), 10%) scale(${big * .6})`, opacity: 0, offset: 0 },
       { transform: `translate(calc(-50% + ${dx}px), 0) scale(${big})`, opacity: 1, offset: .16 },
@@ -129,6 +174,10 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
   async function runGroup(g) {
     const actor = g.by;
     const A = actor && F(actor);
+    hits = { n: 0, dmg: 0 };
+    const lit = new Set([actor, ...g.fx.flatMap(f => [f.u, f.s])].filter(Boolean));
+    field.classList.add('focusing');
+    for (const el of field.querySelectorAll('.fighter')) el.classList.toggle('lit', g.k === 'sudden' || lit.has(el.dataset.u));
     showBanner(g, A);
     await wait(CARD_MS + 60);
     if (stopped) return;
@@ -145,9 +194,9 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
             if (near !== f.u) { await lunge(A, el); near = f.u; }
             else { motion.play(A, 'attack'); await wait(210); }
             if (stopped) return;
-            if (f.v >= 10) await wait(70); // 히트스톱
+            if (f.v >= CRIT) await wait(180); // 치명타 직전 정지
             hitFx(f, A);
-            await wait(STEP.dmg);
+            await wait(STEP.dmg + (f.v >= CRIT ? 200 : 0));
           } else if (A && f.u === actor && f.s && f.s !== actor) {
             // 반격: 맞은 쪽이 되받아친다
             await retreat(A);
@@ -165,6 +214,11 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
         case 'ko':
           motion.play(el, 'down');
           el.classList.add('down');
+          V.impactFrame(130);
+          V.shards(x, y);
+          V.rays(x, y, { n: 40, colors: ['#ff3b5c', '#fff'], life: 500 });
+          field.classList.add('ko-moment');
+          setTimeout(() => field.classList.remove('ko-moment'), STEP.ko * speed);
           V.eliminated(nameOf(f.u), x, y);
           V.shake(shakeEl, 26, 600);
           sfx.ko();
@@ -173,13 +227,15 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
         case 'block':
           motion.play(el, 'guard');
           V.ring(x, y, { color: '#4dabf7', r0: 30, r1: 80, w: 10, life: 500 });
+          V.rays(x, y, { n: 18, colors: ['#7cc4ff', '#fff'], r0: 220, r1: 40, len: 50, life: 320 });
           V.text(x, y - 50, `🛡+${f.v}`, 'f-block');
           sfx.shield();
           await wait(STEP.block);
           break;
         case 'heal':
           motion.play(el, 'heal');
-          V.sparkle(x, y);
+          V.sparkle(x, y, { n: 26, spread: 70 });
+          V.ring(x, y + 30, { color: '#6ef0a0', r0: 10, r1: 90, w: 6, life: 600 });
           V.text(x, y - 50, `+${f.v}`, 'f-heal');
           if (f.h != null) setHp(f.u, f.h);
           sfx.heal();
@@ -236,6 +292,9 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
       }
     }
     await retreat(A);
+    V.comboEnd();
+    for (const el of field.querySelectorAll('.fighter.lit')) el.classList.remove('lit');
+    field.classList.remove('focusing');
     await wait(200);
   }
 
@@ -245,21 +304,31 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
     motion.stop();
     banner.remove();
     title.remove();
-    field.classList.remove('replaying');
+    V.cinema(false);
+    V.comboEnd();
+    field.classList.remove('replaying', 'focusing', 'ko-moment');
+    field.style.transformOrigin = '';
     for (const el of field.querySelectorAll('.fighter')) {
       el.getAnimations().forEach(a => a.cancel());
       el._off = null;
       el.style.zIndex = '';
-      el.classList.remove('atk', 'hit', 'guard');
+      el.classList.remove('atk', 'hit', 'guard', 'lit');
     }
     done();
   };
 
   (async () => {
+    V.cinema(true);
     await wait(200);
     for (const g of rep.plays) {
       if (stopped) break;
       await runGroup(g);
+    }
+    // 이번 턴에 준 피해 합계
+    if (!stopped && turnDmg > 0 && rep.plays.length > 1) {
+      V.bigWord(`TOTAL ${turnDmg}`, 'total', TOTAL_MS * speed + 150);
+      sfx.trigger();
+      await wait(TOTAL_MS);
     }
     await wait(250);
     close();

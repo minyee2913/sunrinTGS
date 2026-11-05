@@ -28,7 +28,7 @@ export const RULES = {
   lobbyGraceMs: 4000,
   voteMs: 30000,      // 호스트 요청 투표가 열려 있는 시간
   logKeep: 40,
-  replayBaseMs: 600,  // 턴 종료 전투 연출: 기본 시간 + 카드 1장당 시간, 최대 시간
-  replayPerMs: 900,
-  replayMaxMs: 6000,
+  replayBaseMs: 900,  // 턴 종료 전투 연출: 기본 시간 + 카드 1장당 시간, 최대 시간
+  replayPerMs: 1250,
+  replayMaxMs: 9000,
 };

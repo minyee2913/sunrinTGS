@@ -123,6 +123,20 @@ export const sfx = {
     if (!ok()) return;
     noise({ dur: .16, vol: .18, f: 800, f2: 3000, q: 2 });
   },
+  // 카드 컷인: 빨려 올라가는 바람 소리 + 짧은 화음
+  cutin() {
+    if (!ok()) return;
+    noise({ dur: .32, vol: .3, f: 300, f2: 4200, q: 1.2 });
+    tone({ f: 220, f2: 440, type: 'sawtooth', dur: .22, vol: .08 });
+    [440, 554, 659].forEach(f => tone({ f, type: 'square', dur: .16, vol: .05, t: .2 }));
+  },
+  // 치명타: 낮게 울리는 폭발음
+  crit() {
+    if (!ok()) return;
+    tone({ f: 70, f2: 28, type: 'sine', dur: .7, vol: .9 });
+    noise({ dur: .5, vol: .55, f: 900, f2: 60, q: .4 });
+    tone({ f: 1760, f2: 440, type: 'sawtooth', dur: .18, vol: .08, t: .02 });
+  },
   ko() {
     if (!ok()) return;
     tone({ f: 120, f2: 30, type: 'sine', dur: .9, vol: .9 });

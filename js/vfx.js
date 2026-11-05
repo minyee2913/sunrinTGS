@@ -55,6 +55,29 @@ function loop() {
       ctx.moveTo(p.x - Math.cos(p.ang) * len / 2, p.y - Math.sin(p.ang) * len / 2);
       ctx.lineTo(p.x + Math.cos(p.ang) * len / 2, p.y + Math.sin(p.ang) * len / 2);
       ctx.stroke();
+    } else if (p.kind === 'ray') {
+      // 집중선: 바깥에서 중심으로 빨려 들어가는 선
+      const r = p.r0 + (p.r1 - p.r0) * t;
+      const c = Math.cos(p.ang), s = Math.sin(p.ang);
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = p.size * (1 - t * .5);
+      ctx.beginPath();
+      ctx.moveTo(p.x + c * r, p.y + s * r);
+      ctx.lineTo(p.x + c * (r + p.len), p.y + s * (r + p.len));
+      ctx.stroke();
+    } else if (p.kind === 'shard') {
+      p.rot += p.spin;
+      ctx.fillStyle = p.color;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      ctx.beginPath();
+      ctx.moveTo(0, -p.size);
+      ctx.lineTo(p.size * .7, p.size * .8);
+      ctx.lineTo(-p.size * .6, p.size * .5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
     } else {
       ctx.fillStyle = p.color;
       ctx.beginPath();
@@ -150,4 +173,136 @@ export function eliminated(name, x = innerWidth / 2, y = innerHeight / 2) {
   el.innerHTML = `<b>탈선린!</b><small>${name.replace(/[<>&]/g, '')}</small>`;
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 1700);
+}
+
+// ── 턴 종료 연출용 (화려한 쪽) ──
+
+// 집중선: 한 점으로 모이는 선
+export function rays(x, y, { n = 28, colors = ['#fff', '#ffd23f'], r0 = Math.max(innerWidth, innerHeight) * .55, r1 = 60, len = 90, size = 2.5, life = 360 } = {}) {
+  if (reduced()) return;
+  for (let i = 0; i < n; i++) {
+    add({ kind: 'ray', x, y, ang: rnd(0, Math.PI * 2), r0: r0 * rnd(.7, 1.1), r1: r1 * rnd(.8, 1.4), len: len * rnd(.5, 1.3), size: size * rnd(.5, 1.4), life: life * rnd(.7, 1), color: colors[i % colors.length], drag: 1 });
+  }
+}
+
+// 대시 잔상: 이동 방향과 나란한 줄
+export function streak(x1, y1, x2, y2, { color = 'rgba(255,255,255,.8)', n = 7 } = {}) {
+  if (reduced()) return;
+  const ang = Math.atan2(y2 - y1, x2 - x1), len = Math.hypot(x2 - x1, y2 - y1);
+  for (let i = 0; i < n; i++) {
+    const k = rnd(.2, .8), off = rnd(-38, 38);
+    slash(x1 + (x2 - x1) * k - Math.sin(ang) * off, y1 + (y2 - y1) * k + Math.cos(ang) * off, { color, len: len * rnd(.3, .7), size: rnd(1.5, 4), life: rnd(160, 280), ang });
+  }
+}
+
+// 파편: 회전하며 튀는 삼각형 조각
+export function shards(x, y, { n = 26, colors = ['#ff3b5c', '#ffd23f', '#fff'], speed = 14, size = 9, life = 1000 } = {}) {
+  if (reduced()) n = Math.ceil(n / 3);
+  for (let i = 0; i < n; i++) {
+    const a = rnd(0, Math.PI * 2), s = rnd(speed * .3, speed);
+    add({ kind: 'shard', x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 4, g: .45, drag: .97, rot: rnd(0, 6), spin: rnd(-.3, .3), size: rnd(size * .5, size * 1.3), life: rnd(life * .6, life), color: colors[i % colors.length] });
+  }
+}
+
+const layer = cls => {
+  const el = document.createElement('div');
+  el.className = cls;
+  document.body.appendChild(el);
+  return el;
+};
+
+// 연출 동안 위아래 레터박스 + 비네트
+let cine = null;
+export function cinema(on) {
+  if (on && !cine) {
+    cine = layer('cine');
+    cine.innerHTML = '<i class="cine-bar t"></i><i class="cine-bar b"></i><i class="cine-vig"></i>';
+    requestAnimationFrame(() => cine?.classList.add('on'));
+  } else if (!on && cine) {
+    const el = cine;
+    cine = null;
+    el.classList.remove('on');
+    setTimeout(() => el.remove(), 400);
+  }
+}
+
+// 카드 컷인: 화면을 가로지르는 기울어진 띠에 카드 그림과 이름
+export function cutIn({ art = null, name = '', sub = '', type = 'atk', flip = false, ms = 700 }) {
+  const el = layer(`cutin t-${type} ${flip ? 'flip' : ''}`);
+  el.innerHTML = `<div class="ci-dim"></div><div class="ci-band"><i class="ci-lines"></i>
+    <div class="ci-art">${art ? `<img src="${art}" alt="" draggable="false">` : '<b>?</b>'}</div>
+    <div class="ci-text"><small></small><b></b></div></div>`;
+  el.querySelector('.ci-text small').textContent = sub;
+  el.querySelector('.ci-text b').textContent = name;
+  const d = flip ? -1 : 1, less = reduced();
+  const band = el.querySelector('.ci-band'), artEl = el.querySelector('.ci-art'), txt = el.querySelector('.ci-text');
+  const o = { duration: ms, fill: 'forwards' };
+  el.querySelector('.ci-dim').animate([{ opacity: 0 }, { opacity: 1, offset: .12 }, { opacity: 1, offset: .82 }, { opacity: 0 }], o);
+  band.animate(less ? [{ opacity: 0 }, { opacity: 1, offset: .15 }, { opacity: 1, offset: .85 }, { opacity: 0 }] : [
+    { transform: 'translateY(-50%) skewY(-7deg) scaleY(0)', offset: 0 },
+    { transform: 'translateY(-50%) skewY(-7deg) scaleY(1.12)', offset: .1, easing: 'ease-out' },
+    { transform: 'translateY(-50%) skewY(-7deg) scaleY(1)', offset: .16 },
+    { transform: 'translateY(-50%) skewY(-7deg) scaleY(1)', offset: .84 },
+    { transform: 'translateY(-50%) skewY(-7deg) scaleY(0)', offset: 1, easing: 'ease-in' },
+  ], o);
+  if (!less) {
+    artEl.animate([
+      { transform: `translateX(${-70 * d}vw)`, offset: 0 },
+      { transform: `translateX(${2 * d}vw)`, offset: .16, easing: 'cubic-bezier(.2,.9,.3,1)' },
+      { transform: `translateX(${-2 * d}vw)`, offset: .84 },
+      { transform: `translateX(${60 * d}vw)`, offset: 1, easing: 'ease-in' },
+    ], o);
+    txt.animate([
+      { transform: `translateX(${80 * d}vw) skewX(-12deg)`, opacity: 0, offset: 0 },
+      { transform: `translateX(${80 * d}vw) skewX(-12deg)`, opacity: 0, offset: .06 },
+      { transform: `translateX(${-1 * d}vw) skewX(-12deg)`, opacity: 1, offset: .22, easing: 'cubic-bezier(.2,.9,.3,1)' },
+      { transform: `translateX(${1.5 * d}vw) skewX(-12deg)`, opacity: 1, offset: .84 },
+      { transform: `translateX(${-70 * d}vw) skewX(-12deg)`, opacity: 0, offset: 1, easing: 'ease-in' },
+    ], o);
+  }
+  setTimeout(() => el.remove(), ms + 40);
+}
+
+// 임팩트 프레임: 한순간 화면을 반전·고대비로
+export function impactFrame(ms = 90) {
+  if (reduced()) return;
+  const el = layer('impact-frame');
+  setTimeout(() => el.remove(), ms);
+}
+
+// 화면 가운데 큰 글자 도장 (CRITICAL!, GUARD 등)
+export function bigWord(str, cls = '', ms = 900) {
+  const el = layer(`bigword ${cls}`);
+  el.textContent = str;
+  el.style.animationDuration = `${ms}ms`;
+  setTimeout(() => el.remove(), ms);
+}
+
+// 카메라: 한 점을 중심으로 잠깐 확대했다가 돌아온다
+export function camera(el, x, y, scale = 1.08, ms = 320) {
+  if (!el || reduced()) return;
+  const r = el.getBoundingClientRect();
+  el.style.transformOrigin = `${x - r.left}px ${y - r.top}px`;
+  el.animate([{ transform: 'scale(1)' }, { transform: `scale(${scale})`, offset: .25, easing: 'ease-out' }, { transform: 'scale(1)' }],
+    { duration: ms, easing: 'cubic-bezier(.3,0,.3,1)' });
+}
+
+// 연타 카운터 (한 카드 안에서 몇 번 때렸는지와 합계)
+let comboEl = null, comboOff = 0;
+export function combo(n, total) {
+  clearTimeout(comboOff);
+  if (!comboEl) comboEl = layer('combo');
+  comboEl.innerHTML = `<b>${n}</b><span>HIT${n > 1 ? 'S' : ''}</span><small>${total} DMG</small>`;
+  comboEl.classList.remove('pop');
+  void comboEl.offsetWidth;
+  comboEl.classList.add('pop');
+  comboOff = setTimeout(comboEnd, 1600);
+}
+export function comboEnd() {
+  clearTimeout(comboOff);
+  if (!comboEl) return;
+  const el = comboEl;
+  comboEl = null;
+  el.classList.add('out');
+  setTimeout(() => el.remove(), 300);
 }
