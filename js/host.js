@@ -76,6 +76,11 @@ export class Host {
 
   handle(uid, reqId, r) {
     const del = { [`req/${uid}/${reqId}`]: null };
+    // 호스트 요청·투표는 판과 상관없이 app이 처리한다
+    if (r.gameId === 'host') {
+      this.onHostReq?.(uid, r);
+      return this.net.update(del);
+    }
     if (!this.G) return this.net.update(del);
     handleRequest(this.G, uid, reqId, r, this.net.now());
     return this.commit(del);

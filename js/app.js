@@ -20,7 +20,7 @@ const S = {
   net: null, uid: null, inst: rid(), ready: false,
   meta: {}, lobby: {}, pub: null, priv: null,
   joined: false, presenceOff: null,
-  host: null, hostOffSince: null, claiming: false, handing: null, vote: null,
+  host: null, hostOffSince: null, claiming: false, handing: null, voteCancel: false, voteClosing: null,
   sel: null, pickSel: null, removeSel: null, pickKey: '',
   pending: null, pendingAt: 0, hiddenU: null,
   modal: null, fxSeen: -1, fxGame: null, lastCur: undefined, pendingFlash: false,
@@ -64,16 +64,13 @@ async function boot() {
 
   S.net.on('meta', v => {
     const prev = S.meta.hostId;
+    const mine = S.meta.vote?.by === S.uid;
     S.meta = v || {};
     const now = S.meta.hostId;
     if (S.ready && prev && now && prev !== now) toast(now === S.uid ? '내가 호스트가 됐어요' : `호스트가 ${name(now)} 님으로 바뀌었어요`);
-    update();
-  });
-  S.net.on('vote', v => {
-    const mine = S.vote?.by === S.uid;
-    S.vote = v;
-    // 내 요청이 사라졌는데 호스트가 되지 않았으면 통과하지 못한 것
-    if (mine && !v) setTimeout(() => { if (S.meta.hostId !== S.uid) toast('호스트 요청이 과반수 찬성을 얻지 못했어요'); }, 800);
+    // 내 투표가 닫혔는데 호스트가 되지 않았으면 통과하지 못한 것 (직접 취소한 경우 제외)
+    else if (mine && !S.meta.vote && now !== S.uid && !S.voteCancel) toast('호스트 요청이 과반수 찬성을 얻지 못했어요');
+    if (!S.meta.vote) S.voteCancel = false;
     update();
   });
   S.net.on('lobby', v => { S.lobby = v || {}; update(); });
@@ -179,6 +176,7 @@ function hostDuty() {
     }
     if (!S.host) {
       S.host = new Host(S.net);
+      S.host.onHostReq = onHostReq;
       S.host.start(m);
     }
     return;
@@ -228,8 +226,9 @@ async function claimHost(prev) {
 }
 
 // ── 호스트 넘기기 ──
-// 호스트는 접속 중인 사람에게 직접 넘길 수 있다. 다른 사람은 투표를 열 수 있고,
-// 접속 중인 사람(호스트 포함)의 과반수가 찬성하면 호스트 탭이 요청자에게 넘긴다.
+// 호스트는 접속 중인 사람에게 직접 넘길 수 있다. 다른 사람은 호스트 요청을 보낼 수 있고,
+// 접속 중인 사람이 2명 이하면 바로, 그보다 많으면 투표를 열어 과반수(호스트 포함)가 찬성하면 넘긴다.
+// 요청·투표는 행동 요청(req)으로 호스트에게 보내고, 투표 현황은 호스트가 meta/vote에 적는다 (보안 규칙 추가 없이 동작).
 // 넘길 때는 이미 받은 요청까지 처리해 hs에 남기고 멈추므로, 게임 중이어도 새 호스트가 그대로 이어간다.
 async function handOver(to) {
   if (!S.host || S.handing || to === S.uid || !isOnline(S.lobby[to])) return;
@@ -237,7 +236,7 @@ async function handOver(to) {
   try {
     await S.host.halt();
     S.host = null;
-    await S.net.update({ 'meta/hostId': to, 'meta/hostInst': null, vote: null });
+    await S.net.update({ 'meta/hostId': to, 'meta/hostInst': null, 'meta/vote': null });
   } catch (e) {
     console.error('호스트 넘기기 실패', e);
     toast('호스트를 넘기지 못했어요');
@@ -246,7 +245,7 @@ async function handOver(to) {
   update();
 }
 
-const liveVote = () => (S.vote?.by && S.net.now() - S.vote.at < RULES.voteMs ? S.vote : null);
+const liveVote = () => { const v = S.meta.vote; return v?.by && S.net.now() - v.at < RULES.voteMs ? v : null; };
 function voteTally(v) {
   const voters = onlineMembers().map(([u]) => u);
   const yes = voters.filter(u => u === v.by || v.v?.[u] === true).length;
@@ -254,31 +253,52 @@ function voteTally(v) {
   return { yes, no, need: Math.floor(voters.length / 2) + 1, total: voters.length };
 }
 
+// 호스트 탭: 받은 호스트 요청·투표 처리 (Host 처리 줄 안에서 불리므로 넘기기는 기다리지 않고 따로 시작한다)
+function onHostReq(uid, r) {
+  if (!S.host || S.handing || !isOnline(S.lobby[uid])) return;
+  const v = liveVote();
+  if (r.type === 'hostReq') {
+    if (uid === S.uid || v) return;
+    if (onlineMembers().length <= 2) return void setTimeout(() => handOver(uid));
+    return S.net.update({ 'meta/vote': { by: uid, at: S.net.now(), v: { [uid]: true } } });
+  }
+  if (!v) return;
+  if (r.type === 'hostVote' && uid !== v.by) return S.net.update({ [`meta/vote/v/${uid}`]: !!r.yes });
+  if (r.type === 'hostVoteCancel' && uid === v.by) return S.net.update({ 'meta/vote': null });
+}
+
 // 투표 결과는 호스트 탭이 판단한다
 function voteDuty() {
-  if (!S.host || S.handing || !S.vote) return;
+  if (!S.host || S.handing || !S.meta.vote) return;
   const v = liveVote();
   if (v && v.by !== S.uid && isOnline(S.lobby[v.by])) {
     const t = voteTally(v);
     if (t.yes >= t.need) return handOver(v.by);
     if (t.total - t.no >= t.need) return;
   }
-  // 시간이 지났거나, 요청자가 나갔거나, 더 이상 과반수가 될 수 없으면 닫는다
-  S.vote = null;
-  S.net.set('vote', null);
+  // 시간이 지났거나, 요청자가 나갔거나, 더 이상 과반수가 될 수 없으면 닫는다 (한 번만 보낸다)
+  if (S.voteClosing === S.meta.vote.at) return;
+  S.voteClosing = S.meta.vote.at;
+  S.net.update({ 'meta/vote': null });
+}
+
+function sendHostReq(type, extra = {}) {
+  return S.net.set(`req/${S.uid}/${rid()}`, { gameId: 'host', type, t: S.net.now(), ...extra })
+    .catch(e => { console.error(e); toast('호스트에게 요청을 보내지 못했어요'); });
 }
 
 function requestHost() {
   if (!S.joined || S.meta.hostId === S.uid) return;
+  if (!isOnline(S.lobby[S.meta.hostId])) return toast('호스트가 연결돼 있지 않아요. 잠시 뒤 자동으로 바뀌어요');
   if (liveVote()) return toast('이미 진행 중인 호스트 투표가 있어요');
-  S.net.set('vote', { by: S.uid, at: S.net.now(), v: { [S.uid]: true } })
-    .catch(e => { console.error(e); toast('호스트 요청을 보내지 못했어요'); });
+  sendHostReq('hostReq');
+  toast(onlineMembers().length <= 2 ? '호스트를 가져오는 중…' : '호스트 투표를 열었어요');
 }
 
 function castVote(yes) {
   const v = liveVote();
   if (!v || v.by === S.uid) return;
-  S.net.set(`vote/v/${S.uid}`, yes).catch(e => console.error(e));
+  sendHostReq('hostVote', { yes });
 }
 
 // 투표 창은 전투 연출 중에도 보이도록 화면과 따로 그린다
@@ -323,7 +343,9 @@ function hostModalHTML() {
     ? `<p class="soft small">접속 중인 사람에게 호스트를 넘길 수 있어요. 게임 중이어도 그대로 이어져요.</p>
        <div class="host-list">${others.map(([u, m]) => `<div class="host-row">${ava(u, 'sm')}<b>${esc(m.name)}</b>
          <button class="btn ghost" data-act="handTo" data-u="${u}">호스트 넘기기</button></div>`).join('') || '<p class="dim">넘겨받을 사람이 없어요.</p>'}</div>`
-    : `<p class="soft small">지금 호스트는 <b>${S.meta.hostId ? esc(name(S.meta.hostId)) : '없음'}</b> 님이에요. 호스트 요청을 보내면 ${RULES.voteMs / 1000}초 동안 투표가 열리고, 접속 중인 ${members.length}명 중 <b>${need}명</b> 이상이 찬성하면(내 표 포함) 내가 호스트가 돼요.</p>
+    : `<p class="soft small">지금 호스트는 <b>${S.meta.hostId ? esc(name(S.meta.hostId)) : '없음'}</b> 님이에요. ${members.length <= 2
+        ? '지금은 2명뿐이라 요청하면 <b>바로</b> 내가 호스트가 돼요.'
+        : `호스트 요청을 보내면 ${RULES.voteMs / 1000}초 동안 투표가 열리고, 접속 중인 ${members.length}명 중 <b>${need}명</b> 이상이 찬성하면(내 표 포함) 내가 호스트가 돼요.`}</p>
        <button class="btn primary cut" data-act="hostReq" ${liveVote() ? 'disabled' : ''}><b>${liveVote() ? '투표 진행 중' : '호스트 요청'}</b></button>`;
   return `<div class="modal"><div class="modal-box host-modal"><div class="modal-head"><div class="stack">${lbl('HOST', 'amber')}<h2>${amHost ? '호스트 넘기기' : '호스트 요청'}</h2></div><button class="btn ghost" data-act="close">닫기</button></div>
     <div class="modal-body">${body}</div></div></div>`;
@@ -580,9 +602,8 @@ function onClick(e) {
     case 'voteYes': return castVote(true);
     case 'voteNo': return castVote(false);
     case 'voteCancel':
-      S.vote = null;
-      S.net.set('vote', null);
-      return renderVote();
+      S.voteCancel = true;
+      return sendHostReq('hostVoteCancel');
     case 'rematch': return S.host?.toLobby(null, S.lobby);
     case 'abort':
       // 실수로 누르지 않게 5초 안에 한 번 더 눌러야 종료
@@ -1249,7 +1270,7 @@ function onTick() {
     render();
   }
   pruneLobby();
-  if (S.vote) { voteDuty(); renderVote(); }
+  if (S.meta.vote) { voteDuty(); renderVote(); }
   updateTimers();
 }
 
