@@ -542,6 +542,30 @@ body.aiming .fighter.locked .f-body { filter: drop-shadow(0 0 10px var(--red)); 
 }
 .field.replaying .plan-strip, .field.replaying .field-hint { display: none; }
 
+/* ══ 카드 등급 ══ */
+.card .rar { position: absolute; top: 0; right: 0; z-index: 2; padding: 0 calc(var(--cw) * .05); height: calc(var(--cw) * .13); min-height: 13px; display: grid; place-items: center;
+  font-size: max(9px, calc(var(--cw) * .075)); font-weight: 700; color: #0b0d11; clip-path: polygon(12% 0, 100% 0, 100% 100%, 0 100%); padding-left: calc(var(--cw) * .07); }
+.card.r-rare .rar { background: oklch(0.75 0.11 230); }
+.card.r-epic .rar { background: oklch(0.72 0.16 300); }
+.card.r-legend .rar { background: linear-gradient(90deg, #ffe08a, #ffb627); }
+.card.r-rare { box-shadow: inset 0 0 0 1px color-mix(in oklch, oklch(0.75 0.11 230) 55%, transparent); }
+.card.r-epic { box-shadow: inset 0 0 0 2px color-mix(in oklch, oklch(0.72 0.16 300) 70%, transparent); }
+.card.r-legend { box-shadow: inset 0 0 0 2px #ffcf4a, inset 0 0 18px color-mix(in oklch, #ffcf4a 35%, transparent); }
+.card.r-legend .art::after { content: ""; position: absolute; inset: 0; background: linear-gradient(115deg, transparent 30%, rgba(255,240,190,.45) 45%, transparent 60%); background-size: 250% 100%; animation: legend-shine 3s ease-in-out infinite; pointer-events: none; }
+@keyframes legend-shine { 0% { background-position: 120% 0; } 60%, 100% { background-position: -120% 0; } }
+.card .cb { display: inline-block; font-weight: 700; font-size: .92em; padding: 0 4px; color: #0b0d11; background: oklch(0.72 0.16 300); white-space: nowrap; cursor: help; }
+.card.r-legend .cb { background: #ffcf4a; }
+.card.hot { box-shadow: inset 0 0 0 3px #ffcf4a, inset 0 0 26px color-mix(in oklch, #ffcf4a 55%, transparent); animation: hot-pulse 1s ease-in-out infinite; }
+.card.hot .cb::before { content: "발동 "; }
+@keyframes hot-pulse { 50% { box-shadow: inset 0 0 0 3px #fff3c2, inset 0 0 34px color-mix(in oklch, #ffcf4a 75%, transparent); } }
+.cutin.r-legend .ci-band { border-color: #ffcf4a; box-shadow: 0 0 90px color-mix(in oklch, #ffcf4a 70%, transparent); }
+.cutin.r-legend .ci-art { box-shadow: 0 0 0 4px #ffcf4a, 0 0 30px #ffcf4a; }
+.cutin.r-legend .ci-text small::before { content: "★ 전설 · "; color: #ffcf4a; }
+.cutin.r-epic .ci-art { box-shadow: 0 0 0 4px oklch(0.78 0.16 300); }
+.cutin.r-epic .ci-text small::before { content: "◆ 영웅 · "; color: oklch(0.8 0.16 300); }
+.bigword.comeback { color: #ffcf4a; text-shadow: 7px 7px 0 #0b0d11, 0 0 60px #ffb627; }
+@media (prefers-reduced-motion: reduce) { .card.r-legend .art::after, .card.hot { animation: none; } }
+
 /* ══ 입장 화면 캐릭터 선택 ══ */
 .t-char { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; gap: 8px 14px; align-items: center; margin-top: 2px; }
 .t-char-now { grid-row: span 1; width: 64px; height: 64px; background: var(--panel); border-left: 3px solid var(--amber); display: grid; place-items: center; }

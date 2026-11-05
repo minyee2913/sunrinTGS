@@ -352,6 +352,21 @@ for (const [id, c] of Object.entries(CARDS)) {
   c.play ??= x => x.installReact();
 }
 
+// ── 등급 ──
+// w: 라운드 보상에서 그 등급이 나올 비중. boost: 역전 배율.
+// 역전: 카드를 쓸 때 내 체력이 살아 있는 다른 모든 사람보다 낮으면 이 카드의 피해·방어도·회복·기믹·드로우·에너지가 배율만큼 커진다 (자해는 그대로).
+export const RARITY = {
+  common: { name: '일반', w: 55 },
+  rare: { name: '희귀', w: 30 },
+  epic: { name: '영웅', w: 12, boost: 1.5 },
+  legend: { name: '전설', w: 3, boost: 2 },
+};
+const LEGEND = ['p67', 'p12', 'p60', 'p68', 'p140', 'p106'];
+const EPIC = ['p05', 'p11', 'p15', 'p63', 'p44', 'p92', 'p96', 'p98', 'p99', 'p56', 'p83', 'p139'];
+for (const c of Object.values(CARDS)) {
+  c.rarity = LEGEND.includes(c.id) ? 'legend' : EPIC.includes(c.id) ? 'epic' : c.cost >= 2 && !c.basic ? 'rare' : 'common';
+}
+
 // 시작 덱 12장: 공격 6, 방어 3, 반응 1, 회복 1, 카드 뽑기 1
 export const STARTER = [
   'p01', 'p01', 'p01', 'p04', 'p06', 'p13', // 주먹부터 3, 눈덩이투척, 복도돌진, 마이크공격

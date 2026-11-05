@@ -11,7 +11,7 @@ import * as V from './vfx.js';
 import { sfx } from './sfx.js';
 import { createMotion } from './motion.js';
 
-const STEP = { dmg: 440, ko: 1600, trigger: 440, block: 300, heal: 340, react: 320, nullify: 280, strip: 280, unreact: 280, debuff: 280, gimmick: 300 };
+const STEP = { dmg: 440, ko: 1600, comeback: 620, trigger: 440, block: 300, heal: 340, react: 320, nullify: 280, strip: 280, unreact: 280, debuff: 280, gimmick: 300 };
 const CARD_MS = 1050; // 카드 컷인 시간
 const CRIT = 10;      // 이 피해부터 치명타 연출
 const TOTAL_MS = 750; // 마지막 턴 합계
@@ -253,6 +253,7 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
         name: c ? cardName(id) : '반응 카드',
         sub: `${g.by ? nameOf(g.by) : ''} · ${c ? `${TYPE_NAME[c.type]} 카드` : '숨겨진 카드'}`,
         type: c?.type || 'react',
+        rarity: c?.rarity,
         flip: !!actorEl?.classList.contains('r'),
         ms: T * .8,
       });
@@ -371,6 +372,18 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
           V.text(x, y - 50, '❔ 반응 설치', 'f-react');
           sfx.react();
           await wait(STEP.react);
+          break;
+        case 'comeback':
+          // 역전 발동: 금빛 번쩍임과 함께 카드가 강해진다
+          camTo({ x, y }, 1.2, 180);
+          V.flash('rgba(255,210,63,.45)', 260);
+          V.rays(x, y, { n: 36, colors: ['#ffd23f', '#fff'], r1: 40, life: 420 });
+          V.ring(x, y, { color: '#ffd23f', r1: 160, w: 12, life: 600 });
+          V.bigWord(`역전! ×${f.v}`, 'crit comeback', 1000);
+          V.text(x, y - 70, `역전 ×${f.v}`, 'f-trigger');
+          motion.play(el, 'cast');
+          sfx.crit();
+          await wait(STEP.comeback);
           break;
         case 'trigger':
           motion.play(el, 'cast');

@@ -5,7 +5,7 @@
 //   예약 중 내 손패·에너지는 상대 반응을 무시한 가상 진행(provisional)으로 보여준다.
 //   반응 결과를 미리 보고 되돌리는 일을 막기 위해서다.
 //   턴 종료(commitTurn) 때 예약한 카드를 반응까지 포함해 실제로 처리한다.
-import { CARDS, STARTER, REWARD_POOL, CURSE } from './cards.js';
+import { CARDS, STARTER, REWARD_POOL, CURSE, RARITY } from './cards.js';
 import { GIMMICKS, CHANGE_CHANCE } from './gimmicks.js';
 import { RULES } from './config.js';
 
@@ -59,6 +59,21 @@ export function replayMs(plays) {
 function sealReplay(G) {
   if (G.replay?.turnNo === G.turnNo) return;
   G.replay = { n: ++G.replaySeq, turnNo: G.turnNo, by: G.cur, plays: G.turnPlays };
+}
+
+// 라운드 보상 후보: 등급을 비중대로 먼저 뽑고, 그 등급에서 겹치지 않게 한 장씩
+function rewardOpts(G, k) {
+  const left = {};
+  for (const id of REWARD_POOL) (left[CARDS[id].rarity] ||= []).push(id);
+  const out = [];
+  while (out.length < k) {
+    const tiers = Object.keys(left).filter(r => left[r].length);
+    if (!tiers.length) break;
+    let x = rand(G) * tiers.reduce((a, r) => a + RARITY[r].w, 0);
+    const r = tiers.find(t => (x -= RARITY[t].w) < 0) || tiers.at(-1);
+    out.push(left[r].splice(Math.floor(rand(G) * left[r].length), 1)[0]);
+  }
+  return out;
 }
 
 // 다음 제한 시간에 연출 시간을 한 번만 더해준다
@@ -411,27 +426,35 @@ function othersOf(G, p) {
   return rot.map(u => P(G, u)).filter(t => t.alive);
 }
 
+// 역전: 내 체력이 살아 있는 다른 모든 사람보다 낮다
+export function isBehind(G, p) {
+  const o = othersOf(G, p);
+  return p.alive && o.length > 0 && o.every(t => p.hp < t.hp);
+}
+
 function makeCtx(G, p, card, target) {
   const others = () => othersOf(G, p);
   const pickRandom = list => list[Math.floor(rand(G) * list.length)] || null;
+  const boost = RARITY[card.rarity]?.boost && isBehind(G, p) ? RARITY[card.rarity].boost : 1;
+  const B = n => (boost === 1 || !n ? n : Math.sign(n) * Math.ceil(Math.abs(n) * boost));
   const c = {
-    G, me: p, target, ended: false, hits: [],
+    G, me: p, target, ended: false, hits: [], boost,
     attacksThisTurn: p.atkCount,
     recentAttackers: p.atkRecent.length,
     others,
-    attack: (t, n, opts) => { if (t) c.hits.push(t.uid); return attack(G, p, t, n, opts); },
+    attack: (t, n, opts) => { if (t) c.hits.push(t.uid); return attack(G, p, t, B(n), opts); },
     attackOthers: n => others().forEach(t => c.attack(t, n)),
     selfDamage: (n, pierce = false) => hurt(G, p, n, { src: p, pierce }),
-    block: n => { n += p.st.dex || 0; p.block += n; fx(G, p.uid, 'block', n); },
-    giveBlock: (t, n) => { if (t?.alive) { n += t.st.dex || 0; t.block += n; fx(G, t.uid, 'block', n); } },
-    gain: (id, n) => addGimmick(G, p, id, n),
-    give: (t, id, n) => addGimmick(G, t, id, n),
-    giveOthers: (id, n) => othersOf(G, p).forEach(t => addGimmick(G, t, id, n)),
+    block: n => { n = B(n) + (p.st.dex || 0); p.block += n; fx(G, p.uid, 'block', n); },
+    giveBlock: (t, n) => { if (t?.alive) { n = B(n) + (t.st.dex || 0); t.block += n; fx(G, t.uid, 'block', n); } },
+    gain: (id, n) => addGimmick(G, p, id, B(n)),
+    give: (t, id, n) => addGimmick(G, t, id, B(n)),
+    giveOthers: (id, n) => othersOf(G, p).forEach(t => addGimmick(G, t, id, B(n))),
     keepBlock: () => { p.keepBlock = true; },
-    heal: n => healP(G, p, n),
-    healOther: (t, n) => healP(G, t, n),
-    draw: n => draw(G, p, n),
-    gainEnergy: n => { p.energy += n; },
+    heal: n => healP(G, p, B(n)),
+    healOther: (t, n) => healP(G, t, B(n)),
+    draw: n => draw(G, p, B(n)),
+    gainEnergy: n => { p.energy += B(n); },
     energyPenalty: t => { if (t?.alive) { t.enPen = 1; fx(G, t.uid, 'debuff', '에너지 -1'); } },
     installReact: () => { p.react = card.id; fx(G, p.uid, 'react', 0); },
     stripReact: t => {
@@ -528,6 +551,10 @@ export function playCard(G, uid, cardU, targetUid, now) {
   target = redirect(G, p, target);
   if (was && target !== was) G.grp.tg = G.last.tg = target ? [target.uid] : [];
   const ctx = makeCtx(G, p, card, target);
+  if (ctx.boost > 1) {
+    fx(G, uid, 'comeback', ctx.boost);
+    log(G, `${p.name}의 역전! ${card.name}의 수치 ×${ctx.boost}`, 'sys');
+  }
   if (!was || target) card.play(ctx);
   G.grp.tg = card.scope === 'random' || card.scope === 'top' ? [...new Set(ctx.hits)] : was && target !== was ? G.last.tg : tg;
   // 공개 기록: 반응 카드는 무엇인지 숨긴다 (id null)
@@ -605,8 +632,7 @@ function endRound(G, now) {
   G.phase = 'pick';
   G.pick = {};
   for (const u of alive(G)) {
-    const pool = shuffle(G, [...REWARD_POOL]);
-    G.pick[u] = { opts: pool.slice(0, 3), done: false };
+    G.pick[u] = { opts: rewardOpts(G, 3), done: false };
   }
   G.deadline = now + RULES.pickMs + delayOnce(G);
   log(G, `${G.round}라운드 종료. 카드 선택 시간!`, 'sys');

@@ -2,7 +2,7 @@ import { createNet, rid } from './net.js';
 import { RULES } from './config.js';
 import { CARDS, TYPE, SCOPE } from './cards.js';
 import { Host } from './host.js';
-import { esc, cardHTML, hiddenCardHTML, avatarHTML, galleryHTML, gimmickChipsHTML, gimmickTipHTML } from './view.js';
+import { esc, cardHTML, hiddenCardHTML, avatarHTML, galleryHTML, gimmickChipsHTML, gimmickTipHTML, comebackTipHTML } from './view.js';
 import { GIMMICKS, linkGimmicks } from './gimmicks.js';
 import { cardText, cardName, cardCost, isEdited, editCount, setCardField, resetCard, resetAll, exportJSON, exportCSV } from './editor.js';
 import { CHARACTERS, charSVG, defaultChar, validChar, cycleChar } from './chars.js?v=sprite-paths-2';
@@ -92,11 +92,11 @@ async function boot() {
   document.addEventListener('pointercancel', () => endDrag(null));
   // 마우스를 올리면 기믹 설명
   document.addEventListener('mouseover', e => {
-    const g = e.target.closest?.('[data-gk],[data-gm]');
+    const g = e.target.closest?.('[data-gk],[data-gm],[data-kw]');
     if (g) showTip(g);
   });
   document.addEventListener('mouseout', e => {
-    const g = e.target.closest?.('[data-gk],[data-gm]');
+    const g = e.target.closest?.('[data-gk],[data-gm],[data-kw]');
     if (g && !g.contains(e.relatedTarget) && !tipPinned) hideTip();
   });
   document.addEventListener('input', e => {
@@ -658,7 +658,7 @@ function endDrag(e) {
 // ── 클릭 처리 ──
 function onClick(e) {
   if (S.suppressClick) { S.suppressClick = false; return; }
-  const gEl = e.target.closest('[data-gk],[data-gm]');
+  const gEl = e.target.closest('[data-gk],[data-gm],[data-kw]');
   if (gEl) { e.stopPropagation(); return showTip(gEl, true); }
   if (!e.target.closest('#tip')) hideTip();
   const el = e.target.closest('[data-act]');
@@ -1098,6 +1098,9 @@ function battleHTML() {
     dock = `<footer class="dock spect">${lbl('ELIMINATED', 'red')}<span>탈선린 · 남은 경기를 관전하고 있어요.</span></footer>`;
   } else {
     const hand = (priv?.hand || []).filter(c => c.u !== S.hiddenU);
+    // 역전 조건: 내 체력이 살아 있는 다른 모든 사람보다 낮다
+    const rivals = p.order.filter(u => u !== S.uid && p.players[u].alive);
+    const behindNow = rivals.length > 0 && rivals.every(u => me.hp < p.players[u].hp);
     const energy = myTurn ? priv?.energy ?? me.energy : me.energy;
     const pips = Array.from({ length: Math.max(RULES.energy, energy) }, (_, i) => `<i class="${i < energy ? 'on' : ''}"></i>`).join('');
     dock = `<footer class="dock ${myTurn ? 'my' : ''}">
@@ -1107,7 +1110,7 @@ function battleHTML() {
         <div class="pips">${pips}</div>
       </div>
       ${!myTurn && hand.length ? `<div class="hand-label">${lbl('NEXT HAND')}다음 턴 손패 · 내 턴에 사용</div>` : ''}
-      <div class="hand ${hand.length > 6 ? 'tight' : ''} ${myTurn ? '' : 'waiting'}" style="--n:${hand.length || 1}">${hand.map(c => cardHTML(c.id, { u: c.u, sel: S.sel === c.u, off: !!blockReason(c) })).join('') || `<p class="dim">${myTurn ? '손패를 모두 예약했어요' : '손패 없음'}</p>`}</div>
+      <div class="hand ${hand.length > 6 ? 'tight' : ''} ${myTurn ? '' : 'waiting'}" style="--n:${hand.length || 1}">${hand.map(c => cardHTML(c.id, { u: c.u, sel: S.sel === c.u, off: !!blockReason(c), hot: behindNow })).join('') || `<p class="dim">${myTurn ? '손패를 모두 예약했어요' : '손패 없음'}</p>`}</div>
       <div class="dock-side">
         ${p.phase === 'battle' ? `<div class="timer dockt ${myTurn ? '' : 'other'}" data-deadline="${p.deadline}">${lbl(myTurn ? 'TIME' : `${curName}의 턴`)}<span class="tv"></span><i></i></div>` : `<div class="dockt-idle">${lbl('WAIT')}</div>`}
         ${myTurn ? `<button class="btn ghost undo" data-act="undo" ${plan.length && !S.pending ? '' : 'disabled'}>되돌리기</button>` : ''}
@@ -1402,14 +1405,14 @@ const rnd = n => Math.floor(Math.random() * n);
 let tipPinned = false;
 function showTip(el, pin = false) {
   const id = el.dataset.gk || el.dataset.gm;
-  if (!GIMMICKS[id]) return;
+  if (!GIMMICKS[id] && el.dataset.kw !== 'comeback') return;
   let tip = $('#tip');
   if (!tip) {
     tip = document.createElement('div');
     tip.id = 'tip';
     document.body.appendChild(tip);
   }
-  tip.innerHTML = gimmickTipHTML(id, el.dataset.n ? +el.dataset.n : null)
+  tip.innerHTML = el.dataset.kw === 'comeback' ? comebackTipHTML(+el.dataset.n) : gimmickTipHTML(id, el.dataset.n ? +el.dataset.n : null)
     + (el.dataset.gm === 'hush' && el.querySelector('i') ? '<p class="tip-rule">이 사람의 기믹은 쉿 때문에 보이지 않아요.</p>' : '');
   tip.className = 'show';
   const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;

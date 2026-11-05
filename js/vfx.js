@@ -276,8 +276,8 @@ export function cinema(on) {
 }
 
 // 카드 컷인: 화면을 가로지르는 기울어진 띠에 카드 그림과 이름
-export function cutIn({ art = null, name = '', sub = '', type = 'atk', flip = false, ms = 700 }) {
-  const el = layer(`cutin t-${type} ${flip ? 'flip' : ''}`);
+export function cutIn({ art = null, name = '', sub = '', type = 'atk', rarity = 'common', flip = false, ms = 700 }) {
+  const el = layer(`cutin t-${type} r-${rarity} ${flip ? 'flip' : ''}`);
   el.innerHTML = `<div class="ci-dim"></div><div class="ci-band"><i class="ci-lines"></i>
     <div class="ci-art">${art ? `<img src="${art}" alt="" draggable="false">` : '<b>?</b>'}</div>
     <div class="ci-text"><small></small><b></b></div></div>`;

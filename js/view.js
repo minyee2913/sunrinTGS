@@ -1,23 +1,31 @@
 // 화면 조각을 만드는 함수들
-import { CARDS, TYPE, SCOPE } from './cards.js';
+import { CARDS, TYPE, SCOPE, RARITY } from './cards.js';
 import { charSVG } from './chars.js?v=sprite-paths-2';
 import { cardText, cardName, cardCost } from './editor.js';
 import { GIMMICKS, GIMMICK_RULE, linkGimmicks } from './gimmicks.js';
 
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
-export function cardHTML(id, { u = '', act = 'card', sel = false, off = false, size = '' } = {}) {
+// hot: 지금 쓰면 역전이 발동한다
+export function cardHTML(id, { u = '', act = 'card', sel = false, off = false, size = '', hot = false } = {}) {
   const c = CARDS[id];
+  const R = RARITY[c.rarity];
   const art = `<img src="img/cards/${c.photo}.webp" alt="" loading="lazy" draggable="false">`;
-  const cls = ['card', `t-${c.type}`, size, sel && 'sel', off && 'off'].filter(Boolean).join(' ');
+  const cls = ['card', `t-${c.type}`, `r-${c.rarity}`, size, sel && 'sel', off && 'off', hot && R?.boost && 'hot'].filter(Boolean).join(' ');
   const data = act ? `data-act="${act}" data-u="${u}" data-id="${id}"` : '';
   return `<div class="${cls}" ${data}>
     <div class="cost">${cardCost(id)}</div>
+    ${c.rarity !== 'common' ? `<div class="rar">${R.name}</div>` : ''}
     <div class="art">${art}</div>
     <div class="cname">${esc(cardName(id))}</div>
     <div class="ctype">${TYPE[c.type]} · ${SCOPE[c.scope]}</div>
-    <div class="ctext" data-text-of="${id}">${linkGimmicks(esc(cardText(id)))}</div>
+    <div class="ctext" data-text-of="${id}">${linkGimmicks(esc(cardText(id)))}${R?.boost ? ` <span class="cb" data-kw="comeback" data-n="${R.boost}">역전 ×${R.boost}</span>` : ''}</div>
   </div>`;
+}
+
+export function comebackTipHTML(boost) {
+  return `<div class="tip-head"><b>역전</b><span class="tip-n">×${boost}</span><span class="lbl amber">영웅·전설 카드</span></div>
+    <p>카드를 쓸 때 내 체력이 살아 있는 다른 모든 사람보다 낮으면 이 카드의 피해·방어도·회복·기믹·드로우·에너지가 ${boost}배가 돼요. (자해는 그대로, 소수점은 올림)</p>`;
 }
 
 export function hiddenCardHTML(size = '') {
