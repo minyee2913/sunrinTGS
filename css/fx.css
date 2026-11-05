@@ -426,3 +426,31 @@ body.aiming .fighter.locked .f-body { filter: drop-shadow(0 0 10px var(--red)); 
 .cast-option b, .cast-option small { display: block; font-size: 10px; white-space: nowrap; }
 .cast-option small { color: var(--muted); font-size: 9px; margin-top: 3px; }
 @media (max-width: 480px) { .cast-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* 세로 대기실: 내 캐릭터 → 캐릭터 고르기 → 참가자·규칙 순서로, 촘촘하게 */
+@media (orientation: portrait) and (max-width: 760px) {
+  .lobby-grid { gap: 14px; }
+  .lobby-grid .unit { order: 1; }
+  .lobby-grid .custom { order: 2; overflow: visible; gap: 8px; }
+  .lobby-grid .squad { order: 3; }
+  .lobby-grid .unit { min-height: 0; flex-direction: row; align-items: center; justify-content: flex-start; gap: 14px; padding: 10px 14px; background: var(--panel); border-left: 3px solid var(--amber); }
+  .unit-head { position: static; order: 2; flex: 1; min-width: 0; }
+  .unit-head .soft { font-size: 13px; margin-top: 4px; }
+  .unit-name { font-size: 26px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .unit-stage { order: 1; width: 100px; height: 100px; flex: none; padding-bottom: 2px; }
+  .unit-ring { width: 92px; height: 20px; bottom: 2px; }
+  .unit-char { width: 90px; }
+  .cast-note { display: none; }
+  .cast-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .cast-option { padding: 4px 2px 6px; border-radius: 8px; }
+  .cast-option .sprite-player { width: 76%; margin: 0 auto; }
+  .cast-option b { font-size: 11px; overflow: hidden; text-overflow: ellipsis; }
+  .cast-option small { display: none; }
+  .stat-grid div { padding: 6px 10px; }
+  .stat-grid b { font-size: 18px; }
+  .col-foot p { display: none; }
+  .row-btn { height: 40px; }
+  .bb-right > .soft { display: none; }
+  .bb-right .wait { font-size: 12px; line-height: 1.35; }
+  .bb-right .wait .lbl { display: none; }
+}
