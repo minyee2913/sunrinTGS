@@ -130,6 +130,25 @@ export const sfx = {
     tone({ f: 220, f2: 440, type: 'sawtooth', dur: .22, vol: .08 });
     [440, 554, 659].forEach(f => tone({ f, type: 'square', dur: .16, vol: .05, t: .2 }));
   },
+  // 내려찍기: 묵직한 착지음
+  slam() {
+    if (!ok()) return;
+    tone({ f: 110, f2: 35, type: 'sine', dur: .45, vol: .85 });
+    noise({ dur: .35, vol: .45, f: 600, f2: 80, q: .6 });
+  },
+  // 에너지탄 발사
+  zap() {
+    if (!ok()) return;
+    tone({ f: 900, f2: 300, type: 'sawtooth', dur: .22, vol: .08 });
+    tone({ f: 1800, f2: 600, type: 'sine', dur: .2, vol: .08 });
+    noise({ dur: .15, vol: .12, f: 4000, f2: 1500, q: 2 });
+  },
+  // 베기
+  slash() {
+    if (!ok()) return;
+    noise({ dur: .14, vol: .3, f: 1800, f2: 6000, q: 3 });
+    tone({ f: 2400, f2: 1200, type: 'triangle', dur: .1, vol: .06 });
+  },
   // 치명타: 낮게 울리는 폭발음
   crit() {
     if (!ok()) return;

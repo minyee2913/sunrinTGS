@@ -541,3 +541,26 @@ body.aiming .fighter.locked .f-body { filter: drop-shadow(0 0 10px var(--red)); 
   .ci-lines, .combo.pop b, .float.f-dmg { animation: none; }
 }
 .field.replaying .plan-strip, .field.replaying .field-hint { display: none; }
+
+/* ══ 전투 동작 이펙트 ══ */
+.field.replaying { transform-origin: 50% 50%; will-change: transform; }
+.afterimage { position: fixed; z-index: 44; pointer-events: none; mix-blend-mode: screen; }
+.afterimage.cyan { filter: brightness(1.5) saturate(0) sepia(1) hue-rotate(150deg) saturate(5); }
+.afterimage.amber { filter: brightness(1.5) saturate(0) sepia(1) hue-rotate(-15deg) saturate(5); }
+.afterimage.violet { filter: brightness(1.5) saturate(0) sepia(1) hue-rotate(225deg) saturate(4); }
+.afterimage .clones, .afterimage .sprite-frames { animation: none !important; }
+.mcircle { position: fixed; z-index: 44; pointer-events: none; aspect-ratio: 1; transform: translate(-50%, -50%) scaleY(.3); }
+.mcircle i { position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--c); box-shadow: 0 0 16px var(--c), inset 0 0 16px var(--c); animation: mc-spin 1.6s linear infinite; }
+.mcircle i:first-child { background: repeating-conic-gradient(from 0deg, color-mix(in oklch, var(--c) 55%, transparent) 0 5deg, transparent 5deg 30deg);
+  -webkit-mask: radial-gradient(circle, transparent 60%, #000 61%, #000 74%, transparent 75%); mask: radial-gradient(circle, transparent 60%, #000 61%, #000 74%, transparent 75%); }
+.mcircle i:last-child { inset: 22%; animation-direction: reverse; border-style: dashed; }
+@keyframes mc-spin { to { transform: rotate(360deg); } }
+.shock { position: fixed; z-index: 44; pointer-events: none; aspect-ratio: 1; transform: translate(-50%, -50%) scaleY(.26); border-radius: 50%; border: 5px solid var(--c); box-shadow: 0 0 22px var(--c); }
+.dome { position: fixed; z-index: 44; pointer-events: none; aspect-ratio: 1; border-radius: 50%; mix-blend-mode: screen;
+  background: radial-gradient(circle, transparent 52%, color-mix(in oklch, var(--c) 30%, transparent) 66%, rgba(255,255,255,.75) 70%, transparent 72%),
+    repeating-linear-gradient(60deg, color-mix(in oklch, var(--c) 22%, transparent) 0 2px, transparent 2px 16px),
+    repeating-linear-gradient(-60deg, color-mix(in oklch, var(--c) 22%, transparent) 0 2px, transparent 2px 16px);
+  -webkit-mask: radial-gradient(circle, #000 70%, transparent 72%); mask: radial-gradient(circle, #000 70%, transparent 72%); box-shadow: 0 0 40px var(--c); }
+.pillar { position: fixed; z-index: 44; pointer-events: none; mix-blend-mode: screen; filter: blur(1px);
+  background: linear-gradient(180deg, transparent 0%, color-mix(in oklch, var(--c) 40%, transparent) 40%, var(--c) 85%, #fff 100%); box-shadow: 0 0 40px var(--c); }
+@media (prefers-reduced-motion: reduce) { .mcircle i { animation: none; } }

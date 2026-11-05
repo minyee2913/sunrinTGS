@@ -65,6 +65,55 @@ function loop() {
       ctx.moveTo(p.x + c * r, p.y + s * r);
       ctx.lineTo(p.x + c * (r + p.len), p.y + s * (r + p.len));
       ctx.stroke();
+    } else if (p.kind === 'arc') {
+      // 초승달 베기: 빠르게 휘두르며 그려지고 얇아지며 사라진다
+      const k = Math.min(1, t * 3.2);
+      const a0 = p.ang, a1 = p.ang + p.sweep * k * p.dir;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, Math.min(a0, a1), Math.max(a0, a1));
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = p.size * (1 - t * .8);
+      ctx.stroke();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = p.size * .3 * (1 - t);
+      ctx.stroke();
+    } else if (p.kind === 'crack') {
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = p.size * (1 - t * .6);
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      for (const [px, py] of p.pts) ctx.lineTo(p.x + px, p.y + py);
+      ctx.stroke();
+    } else if (p.kind === 'star') {
+      const s = p.size * (t < .15 ? t / .15 : 1 - (t - .15) * .4);
+      ctx.fillStyle = p.color;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.rot);
+      // 큰 십자 다음에 45도 돌려 작은 십자
+      for (const [i, [w, h]] of [[s, s * .1], [s * .1, s], [s * .55, s * .06], [s * .06, s * .55]].entries()) {
+        if (i === 2) ctx.rotate(Math.PI / 4);
+        ctx.beginPath();
+        ctx.moveTo(-w, 0); ctx.lineTo(0, -h); ctx.lineTo(w, 0); ctx.lineTo(0, h);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    } else if (p.kind === 'orb') {
+      // 에너지탄: 포물선으로 날아가며 꼬리를 남긴다
+      const ox = p.x0 + (p.x1 - p.x0) * t, oy = p.y0 + (p.y1 - p.y0) * t - Math.sin(t * Math.PI) * p.arc;
+      ctx.globalAlpha = 1;
+      const g = ctx.createRadialGradient(ox, oy, 0, ox, oy, p.size);
+      g.addColorStop(0, '#fff');
+      g.addColorStop(.3, p.color);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(ox, oy, p.size, 0, Math.PI * 2);
+      ctx.fill();
+      parts.push({ t0: now, drag: .9, g: 0, vx: rnd(-1, 1), vy: rnd(-1, 1), kind: 'dot', x: ox, y: oy, size: p.size * .28, life: 260, color: p.color });
     } else if (p.kind === 'shard') {
       p.rot += p.spin;
       ctx.fillStyle = p.color;
@@ -305,4 +354,92 @@ export function comboEnd() {
   comboEl = null;
   el.classList.add('out');
   setTimeout(() => el.remove(), 300);
+}
+
+// ── 전투 동작 이펙트 ──
+
+// 초승달 베기 궤적
+export function crescent(x, y, { color = '#9fe8ff', r = 80, size = 12, dir = 1, ang = rnd(-2.6, -.6), sweep = 2.4, life = 300 } = {}) {
+  add({ kind: 'arc', x, y, r, size, dir, ang, sweep, life, color, drag: 1 });
+}
+
+// 바닥 균열: 옆으로 갈라지는 금
+export function cracks(x, y, { n = 7, len = 110, color = 'rgba(255,236,190,.95)', life = 750 } = {}) {
+  if (reduced()) n = 3;
+  for (let i = 0; i < n; i++) {
+    const side = i % 2 ? -1 : 1;
+    let px = 0, py = 0;
+    const pts = [];
+    const ang = rnd(-.45, .45);
+    for (let k = 0; k < 4; k++) {
+      const step = len * rnd(.18, .32);
+      px += Math.cos(ang + rnd(-.5, .5)) * step * side;
+      py += Math.sin(ang + rnd(-.5, .5)) * step * .35;
+      pts.push([px, py]);
+    }
+    add({ kind: 'crack', x, y, pts, size: rnd(2, 4.5), life: rnd(life * .7, life), color, drag: 1 });
+  }
+}
+
+// 별 모양 타격광
+export function flare(x, y, { color = '#fff', size = 70, life = 260 } = {}) {
+  add({ kind: 'star', x, y, size, life, color, rot: rnd(0, Math.PI / 2), drag: 1 });
+}
+
+// 에너지탄: ms 뒤에 도착한다
+export function projectile(x0, y0, x1, y1, { color = '#b197fc', size = 20, ms = 280, arc = 40 } = {}) {
+  add({ kind: 'orb', x: x0, y: y0, x0, y0, x1, y1, size, life: ms, color, arc: reduced() ? 0 : arc, drag: 1 });
+  return new Promise(r => setTimeout(r, ms));
+}
+
+const fxEl = (cls, x, y, css = {}) => {
+  const el = document.createElement('div');
+  el.className = cls;
+  Object.assign(el.style, { left: `${x}px`, top: `${y}px`, ...css });
+  document.body.appendChild(el);
+  return el;
+};
+
+// 잔상: 캐릭터 모습을 복사해 그 자리에 남기고 흐려지게
+export function afterimage(fighter, { tint = 'cyan' } = {}) {
+  if (reduced()) return;
+  const body = fighter?.querySelector('.f-body');
+  if (!body) return;
+  const r = body.getBoundingClientRect();
+  const g = body.cloneNode(true);
+  g.className = `afterimage ${tint}`;
+  Object.assign(g.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+  document.body.appendChild(g);
+  g.animate([{ opacity: .6, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(1.06)' }], { duration: 320, easing: 'ease-out' }).onfinish = () => g.remove();
+}
+
+// 발밑 마법진 (회전)
+export function magicCircle(x, y, w, { color = '#b197fc', ms = 900 } = {}) {
+  const el = fxEl('mcircle', x, y, { width: `${w}px`, '--c': color });
+  el.innerHTML = '<i></i><i></i>';
+  el.animate([{ opacity: 0, transform: 'translate(-50%, -50%) scaleY(.3) scale(.4)' }, { opacity: 1, transform: 'translate(-50%, -50%) scaleY(.3) scale(1)', offset: .2 },
+    { opacity: 1, transform: 'translate(-50%, -50%) scaleY(.3) scale(1)', offset: .75 }, { opacity: 0, transform: 'translate(-50%, -50%) scaleY(.3) scale(1.2)' }],
+  { duration: ms, easing: 'ease-out' }).onfinish = () => el.remove();
+}
+
+// 바닥 충격파 (납작한 고리)
+export function shockwave(x, y, { w = 320, color = 'rgba(255,220,160,.9)', ms = 520 } = {}) {
+  const el = fxEl('shock', x, y, { '--c': color });
+  el.animate([{ width: '20px', opacity: 1 }, { width: `${w}px`, opacity: 0 }], { duration: ms, easing: 'cubic-bezier(.1,.7,.3,1)' }).onfinish = () => el.remove();
+}
+
+// 방어막 돔
+export function dome(x, y, size, { color = '#7cc4ff', ms = 700 } = {}) {
+  const el = fxEl('dome', x, y, { width: `${size}px`, '--c': color });
+  el.animate([{ opacity: 0, transform: 'translate(-50%, -50%) scale(.3)' }, { opacity: 1, transform: 'translate(-50%, -50%) scale(1.08)', offset: .25 },
+    { opacity: .9, transform: 'translate(-50%, -50%) scale(1)', offset: .7 }, { opacity: 0, transform: 'translate(-50%, -50%) scale(1.15)' }],
+  { duration: ms, easing: 'ease-out' }).onfinish = () => el.remove();
+}
+
+// 위에서 내려오는 빛기둥
+export function pillar(x, bottom, w, { color = '#6ef0a0', ms = 800 } = {}) {
+  const el = fxEl('pillar', x, 0, { width: `${w}px`, height: `${bottom}px`, '--c': color });
+  el.animate([{ opacity: 0, transform: 'translateX(-50%) scaleX(.1)' }, { opacity: 1, transform: 'translateX(-50%) scaleX(1)', offset: .2 },
+    { opacity: .8, transform: 'translateX(-50%) scaleX(.8)', offset: .7 }, { opacity: 0, transform: 'translateX(-50%) scaleX(0)' }],
+  { duration: ms, easing: 'ease-out' }).onfinish = () => el.remove();
 }
