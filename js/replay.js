@@ -6,15 +6,16 @@ import { replayMs } from './engine.js';
 import * as V from './vfx.js';
 import { sfx } from './sfx.js';
 
-const STEP = { dmg: 380, ko: 1300, trigger: 420, block: 280, heal: 320, react: 320, nullify: 260, strip: 260, unreact: 280, debuff: 280 };
-const groupMs = g => 560 + g.fx.reduce((a, f) => a + (STEP[f.k] || 260), 0) + 240;
+const STEP = { dmg: 380, ko: 1300, trigger: 420, block: 280, heal: 320, react: 320, nullify: 260, strip: 260, unreact: 280, debuff: 280, gimmick: 300, clone: 340 };
+const CARD_MS = 800; // 낸 카드를 크게 보여주는 시간
+const groupMs = g => CARD_MS + 140 + g.fx.reduce((a, f) => a + (STEP[f.k] || 260), 0) + 240;
 
 export function playReplay(rep, { field, shakeEl, players, nameOf }) {
   let done;
   const finished = new Promise(r => { done = r; });
   let stopped = false;
   const natural = rep.plays.reduce((a, g) => a + groupMs(g), 0);
-  const speed = Math.min(1 / 1.5, Math.max(.25, (replayMs(rep.plays) - 150) / natural));
+  const speed = Math.min(1 / 1.5, Math.max(.12, (replayMs(rep.plays) - 150) / natural));
   const wait = ms => (stopped ? Promise.resolve() : new Promise(r => setTimeout(r, ms * speed)));
 
   const F = u => field.querySelector(`.fighter[data-u="${u}"]`);
@@ -87,19 +88,30 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
   field.appendChild(banner);
   const title = document.createElement('div');
   title.className = 'field-title';
-  title.textContent = rep.by ? `⚔️ ${nameOf(rep.by)}의 턴 결과` : '⚔️ 라운드 종료';
+  title.innerHTML = `<span class="lbl amber">TURN RESOLVE</span><b></b>`;
+  title.querySelector('b').textContent = rep.start ? `${nameOf(rep.by)}의 턴 시작` : rep.by ? `${nameOf(rep.by)}의 턴 결과` : '라운드 종료';
   field.appendChild(title);
   field.classList.add('replaying');
 
   const showBanner = (g, actorEl) => {
-    if (g.k === 'sudden') banner.innerHTML = '<div class="sudden-banner">⚠️ 라운드 종료 피해</div>';
+    if (g.k === 'sudden') banner.innerHTML = '<div class="sudden-banner">라운드 종료 피해</div>';
+    else if (g.k === 'start') banner.innerHTML = `<div class="sudden-banner start">${nameOf(g.by)}의 턴 시작 효과</div>`;
     else if (g.k === 'curse') banner.innerHTML = cardHTML(g.id || CURSE, { act: '', size: 'mid' });
     else banner.innerHTML = g.id ? cardHTML(g.id, { act: '', size: 'mid' }) : hiddenCardHTML('mid');
     const fr = field.getBoundingClientRect();
     const x = actorEl ? center(actorEl).x - fr.left : fr.width / 2;
-    banner.style.left = `${Math.min(fr.width - 80, Math.max(80, x))}px`;
-    banner.animate([{ transform: 'translate(-50%, 20px) scale(.6)', opacity: 0 }, { transform: 'translate(-50%, 0) scale(1)', opacity: 1 }],
-      { duration: 180, easing: 'cubic-bezier(.2,1.4,.4,1)', fill: 'forwards' });
+    const left = Math.min(fr.width - 70, Math.max(70, x));
+    banner.style.left = `${left}px`;
+    // 필드 가운데에서 크게 튀어나왔다가, 잠깐 보여준 뒤 사용한 캐릭터 머리 위로 작아지며 이동
+    const dx = fr.width / 2 - left;
+    const big = Math.min(1.9, (fr.height * .92) / Math.max(1, banner.getBoundingClientRect().height || 1));
+    const T = CARD_MS * speed;
+    banner.animate([
+      { transform: `translate(calc(-50% + ${dx}px), 10%) scale(${big * .6})`, opacity: 0, offset: 0 },
+      { transform: `translate(calc(-50% + ${dx}px), 0) scale(${big})`, opacity: 1, offset: .16 },
+      { transform: `translate(calc(-50% + ${dx}px), 0) scale(${big})`, opacity: 1, offset: .78 },
+      { transform: 'translate(-50%, 0) scale(1)', opacity: 1, offset: 1 },
+    ], { duration: T, easing: 'cubic-bezier(.3,1.2,.4,1)', fill: 'forwards' });
     sfx.card();
   };
 
@@ -107,7 +119,7 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
     const actor = g.by;
     const A = actor && F(actor);
     showBanner(g, A);
-    await wait(420);
+    await wait(CARD_MS + 60);
     let near = null;
     for (const f of g.fx) {
       if (stopped) return;
@@ -137,7 +149,7 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
           }
           break;
         case 'ko':
-          el.classList.add('ko');
+          el.classList.add('down');
           V.eliminated(nameOf(f.u), x, y);
           V.shake(shakeEl, 26, 600);
           sfx.ko();
@@ -190,6 +202,23 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
           V.text(x, y - 50, f.v, 'f-debuff');
           sfx.debuff();
           await wait(STEP.debuff);
+          break;
+        case 'gimmick': {
+          const col = { buff: ['#7fd6ff', '#e6f6ff'], debuff: ['#ff7a7a', '#ffd0d0'], mixed: ['#ffd23f', '#fff3c2'] }[f.kind] || ['#fff'];
+          V.ring(x, y + 30, { color: col[0], r0: 12, r1: 60, w: 4, life: 500 });
+          V.sparkle(x, y, { colors: col, n: 10 });
+          V.text(x, y - 60, f.v, `f-gimmick g-${f.kind || 'buff'}`);
+          (f.kind === 'debuff' ? sfx.debuff : sfx.react)();
+          // 이름표의 기믹 칩도 바로 맞춰 보여준다
+          await wait(STEP.gimmick);
+          break;
+        }
+        case 'clone':
+          V.puff(x + 30, y, { color: 'rgba(160,220,255,.6)', n: 12 });
+          V.text(x, y - 40, '분신이 대신 맞음!', 'f-gimmick g-buff');
+          el.querySelector('.clone')?.remove();
+          sfx.blocked();
+          await wait(STEP.clone);
           break;
       }
     }

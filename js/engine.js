@@ -6,6 +6,7 @@
 //   반응 결과를 미리 보고 되돌리는 일을 막기 위해서다.
 //   턴 종료(commitTurn) 때 예약한 카드를 반응까지 포함해 실제로 처리한다.
 import { CARDS, STARTER, REWARD_POOL, CURSE } from './cards.js';
+import { GIMMICKS } from './gimmicks.js';
 import { RULES } from './config.js';
 
 // ── 난수 (mulberry32, 상태를 G.rng에 보관) ──
@@ -73,7 +74,7 @@ export function createGame({ gameId, players, seed, now }) {
     round: 1, turnNo: 0, turnIdx: -1, cur: null, phase: 'battle', deadline: 0,
     order: [], players: {}, log: [], logSeq: 0, fx: [], fxSeq: 0, last: null, lastSeq: 0,
     elim: [], pick: null, result: null, done: {}, ack: {}, startedAt: now,
-    turnPlays: [], grp: null, replay: null, replaySeq: 0, delayUsed: 0,
+    turnPlays: [], grp: null, replay: null, replaySeq: 0, delayUsed: 0, hist: [],
   };
   G.order = shuffle(G, players.map(p => p.uid));
   for (const { uid, name, char } of players) {
@@ -81,12 +82,15 @@ export function createGame({ gameId, players, seed, now }) {
       uid, name, char: char || null, hp: RULES.maxHp, maxHp: RULES.maxHp, block: 0, energy: 0, alive: true,
       rng: (seed ^ [...uid].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) | 0, 7)) | 0,
       draw: [], hand: [], discard: [],
-      react: null, drawPen: 0, drawBonus: 0, enPen: 0, keepBlock: false,
+      react: null, drawBonus: 0, enPen: 0, keepBlock: false, st: {}, clean: true,
       atkSince: [], atkRecent: [], plays: {}, atkCount: 0, out: null,
       stats: { dealt: 0, taken: 0, self: 0, maxHit: 0, healed: 0, cards: 0, blocked: 0, kills: 0 },
     };
   }
-  for (const p of Object.values(G.players)) p.draw = deckShuffle(p, STARTER.map(id => mk(G, id)));
+  for (const p of Object.values(G.players)) {
+    p.draw = deckShuffle(p, STARTER.map(id => mk(G, id)));
+    draw(G, p, RULES.drawPerTurn);
+  }
   log(G, `게임 시작! 선공은 ${P(G, G.order[0]).name}`, 'sys');
   nextTurn(G, now);
   return G;
@@ -103,6 +107,11 @@ function nextTurn(G, now) {
 
 function beginTurn(G, uid, now) {
   const p = P(G, uid);
+  // 턴 시작 기믹 효과는 직전 턴 연출 끝에 붙인다 (이미 재생된 연출이면 새 연출로)
+  const fresh = G.replay && G.replay.turnNo === G.turnNo && G.delayUsed !== G.replay.n;
+  const startGrp = { k: 'start', by: uid, id: null, tg: [], fx: [] };
+  G.grp = startGrp;
+  const oldTurn = G.turnNo;
   G.turnNo++;
   G.cur = uid;
   G.phase = 'battle';
@@ -121,10 +130,71 @@ function beginTurn(G, uid, now) {
   p.enPen = 0;
   p.plays = {};
   p.atkCount = 0;
-  draw(G, p, RULES.drawPerTurn - p.drawPen + p.drawBonus);
-  p.drawPen = 0;
   p.drawBonus = 0;
+  turnStartGimmicks(G, p);
+  G.grp = null;
+  if (startGrp.fx.length) {
+    if (fresh) G.replay.plays.push(startGrp);
+    else G.replay = { n: ++G.replaySeq, turnNo: oldTurn, by: uid, start: true, plays: [startGrp] };
+  }
+  if (!p.alive) { // 낙원으로 쓰러진 경우
+    if (checkWin(G)) return;
+    return nextTurn(G, now);
+  }
   G.deadline = now + RULES.turnMs + delayOnce(G);
+}
+
+// ── 기믹 ──
+const gname = id => GIMMICKS[id].name;
+
+// n만큼 쌓는다 (음수면 줄인다). 최대치가 있으면 그 이상 쌓이지 않는다.
+export function addGimmick(G, t, id, n) {
+  if (!t?.alive || !n) return;
+  const g = GIMMICKS[id];
+  const before = t.st[id] || 0;
+  const after = Math.max(0, Math.min(g.max ?? Infinity, before + n));
+  if (after === before) return;
+  if (after) t.st[id] = after; else delete t.st[id];
+  if (id === 'rice' && after > before) t.clean = true;
+  const hidden = t.st.hush && id !== 'hush';
+  fx(G, t.uid, 'gimmick', hidden ? '기믹 ?' : `${g.name} ${after > before ? '+' : ''}${after - before}`, { g: hidden ? null : id, kind: g.kind });
+}
+
+function turnStartGimmicks(G, p) {
+  const st = p.st;
+  if (st.paradise) {
+    if (rand(G) < .5) {
+      const got = Math.min(5, p.maxHp - p.hp);
+      p.hp += got;
+      fx(G, p.uid, 'heal', got, { h: p.hp });
+      log(G, `${p.name}의 ${gname('paradise')}: 체력 +5`);
+    } else {
+      log(G, `${p.name}의 ${gname('paradise')}: 체력 -5`);
+      hurt(G, p, 5, { pierce: true });
+    }
+  }
+  if (!p.alive) return;
+  if (st.rice) {
+    if (p.clean) {
+      log(G, `${p.name}의 ${gname('rice')}: 피해를 받지 않아 체력 10 회복`);
+      healP(G, p, 10);
+    }
+    p.clean = true;
+  }
+  if (st.ai) {
+    p.energy += 1;
+    fx(G, p.uid, 'gimmick', `${gname('ai')}: 에너지 +1`, { g: 'ai', kind: 'buff' });
+  }
+  if (st.slow && p.hand.length) {
+    const n = Math.min(st.slow, p.hand.length);
+    for (let k = 0; k < n; k++) p.discard.push(...p.hand.splice(Math.floor(rand(p) * p.hand.length), 1));
+    fx(G, p.uid, 'gimmick', `${gname('slow')}: 손패 ${n}장 버림`, { g: 'slow', kind: 'debuff' });
+    log(G, `${p.name}의 ${gname('slow')}: 손패 ${n}장 버림`);
+  }
+  for (const id of Object.keys(st)) {
+    st[id]--;
+    if (st[id] <= 0) delete st[id];
+  }
 }
 
 export function endTurn(G, uid, now, reason = '') {
@@ -145,6 +215,9 @@ export function endTurn(G, uid, now, reason = '') {
   p.discard.push(...p.hand);
   p.hand = [];
   p.energy = 0;
+  // 다음 턴 손패를 미리 뽑아 둔다 (내 턴에만 쓸 수 있다). 이번 턴에 걸린 내 드로우 증감을 여기서 반영한다.
+  if (p.alive) draw(G, p, RULES.drawPerTurn + p.drawBonus);
+  p.drawBonus = 0;
   sealReplay(G);
   if (checkWin(G)) return null;
   nextTurn(G, now);
@@ -174,6 +247,7 @@ function hurt(G, p, n, { src = null, pierce = false } = {}) {
   }
   const dmg = n - blocked;
   p.hp -= dmg;
+  if (dmg > 0) p.clean = false;
   p.stats.blocked += blocked;
   if (src && src !== p) {
     src.stats.dealt += dmg;
@@ -205,13 +279,15 @@ function kill(G, p, src) {
 // 체력에 들어간 피해를 돌려준다.
 function attack(G, src, tgt, n, { pierce = false } = {}) {
   if (!tgt || !tgt.alive) return 0;
+  if (n > 0) n = Math.max(0, n + (src.st.str || 0) - (src.st.weak || 0));
+  if (src.st.buta && tgt.st.manjun) n *= 2;
   const rc = tgt.react && !G.noReact ? CARDS[tgt.react] : null;
   const R = rc?.react;
   let reflect = 0;
   const notes = [];
   if (R) {
     tgt.react = null;
-    if (R.block) { tgt.block += R.block; fx(G, tgt.uid, 'block', R.block); notes.push(`방어도 +${R.block}`); }
+    if (R.block) { const b = R.block + (tgt.st.dex || 0); tgt.block += b; fx(G, tgt.uid, 'block', b); notes.push(`방어도 +${b}`); }
     if (R.reduce) { n = Math.max(0, n - R.reduce); notes.push(`피해 ${R.reduce} 감소`); }
     if (R.nullify) { n = 0; fx(G, tgt.uid, 'nullify', 0); notes.push('피해 무효'); }
     if (R.reflect) { reflect = Math.floor(n * R.reflect); n -= reflect; if (reflect) notes.push(`피해 ${reflect} 되돌림`); }
@@ -222,16 +298,25 @@ function attack(G, src, tgt, n, { pierce = false } = {}) {
     log(G, `${tgt.name}의 반응 발동: ${rc.name}! ${notes.join(', ')}`, 'react');
     fx(G, tgt.uid, 'trigger', rc.name, { id: rc.id });
   }
+  let decoy = false;
+  if (n > 0 && tgt.st.clone) {
+    decoy = true;
+    n = 0;
+    addGimmick(G, tgt, 'clone', -1);
+    fx(G, tgt.uid, 'clone', 0, { s: src.uid });
+    log(G, `${tgt.name}의 ${gname('clone')}이 대신 맞았다`, 'react');
+  }
   const dmg = n > 0 ? hurt(G, tgt, n, { src, pierce }) : 0;
-  if (n <= 0 && !R?.nullify) fx(G, tgt.uid, 'dmg', 0, { s: src.uid, b: 0, h: tgt.hp });
+  if (n <= 0 && !R?.nullify && !decoy) fx(G, tgt.uid, 'dmg', 0, { s: src.uid, b: 0, h: tgt.hp });
+  if (dmg > 0 && tgt.alive && tgt.st.manjun) healP(G, tgt, Math.floor(dmg / 2));
   if (src !== tgt && !tgt.atkSince.includes(src.uid)) tgt.atkSince.push(src.uid);
 
   if (R) {
-    if (R.drawBonus && tgt.alive) tgt.drawBonus = R.drawBonus;
+    if (R.drawBonus && tgt.alive) giveDraw(G, tgt, R.drawBonus);
     if (src.alive && R.counter) hurt(G, src, R.counter, { src: tgt });
     if (src.alive && reflect) hurt(G, src, reflect, { src: tgt });
     if (src.alive && R.curse) { addCards(G, src, CURSE, R.curse, 'hand'); fx(G, src.uid, 'debuff', `${CARDS[CURSE].name} +${R.curse}`); }
-    if (src.alive && R.penalty) { src.drawPen = 1; src.enPen = 1; fx(G, src.uid, 'debuff', '드로우·에너지 -1'); }
+    if (src.alive && R.penalty) { addGimmick(G, src, 'slow', 1); src.enPen = 1; fx(G, src.uid, 'debuff', '에너지 -1'); }
   }
   return dmg;
 }
@@ -262,14 +347,16 @@ function makeCtx(G, p, card, target) {
     attack: (t, n, opts) => { if (t) c.hits.push(t.uid); return attack(G, p, t, n, opts); },
     attackOthers: n => others().forEach(t => c.attack(t, n)),
     selfDamage: (n, pierce = false) => hurt(G, p, n, { src: p, pierce }),
-    block: n => { p.block += n; fx(G, p.uid, 'block', n); },
-    giveBlock: (t, n) => { if (t?.alive) { t.block += n; fx(G, t.uid, 'block', n); } },
+    block: n => { n += p.st.dex || 0; p.block += n; fx(G, p.uid, 'block', n); },
+    giveBlock: (t, n) => { if (t?.alive) { n += t.st.dex || 0; t.block += n; fx(G, t.uid, 'block', n); } },
+    gain: (id, n) => addGimmick(G, p, id, n),
+    give: (t, id, n) => addGimmick(G, t, id, n),
+    giveOthers: (id, n) => othersOf(G, p).forEach(t => addGimmick(G, t, id, n)),
     keepBlock: () => { p.keepBlock = true; },
     heal: n => healP(G, p, n),
     healOther: (t, n) => healP(G, t, n),
     draw: n => draw(G, p, n),
     gainEnergy: n => { p.energy += n; },
-    drawPenalty: t => { if (t?.alive) { t.drawPen = 1; fx(G, t.uid, 'debuff', '드로우 -1'); } }, // 중첩되지 않음
     energyPenalty: t => { if (t?.alive) { t.enPen = 1; fx(G, t.uid, 'debuff', '에너지 -1'); } },
     installReact: () => { p.react = card.id; fx(G, p.uid, 'react', 0); },
     stripReact: t => {
@@ -288,6 +375,11 @@ function makeCtx(G, p, card, target) {
     endTurn: () => { c.ended = true; },
   };
   return c;
+}
+
+function giveDraw(G, t, n) {
+  if (t.uid === G.cur) t.drawBonus += n;
+  else draw(G, t, n);
 }
 
 function healP(G, p, n) {
@@ -320,11 +412,18 @@ export function playCard(G, uid, cardU, targetUid, now) {
   if (card.limit && (p.plays[inst.id] || 0) >= card.limit) return `이 카드는 한 턴에 ${card.limit}번까지 쓸 수 있어요`;
   if (card.type === 'react' && p.react) return '반응 카드는 하나만 설치할 수 있어요';
   let target = null;
-  if (card.scope === 'one') {
+  const blind = card.scope === 'one' && p.st.blind;
+  if (blind) {
+    if (!othersOf(G, p).length) return '대상이 없어요';
+  } else if (card.scope === 'one') {
     target = G.players[targetUid];
     if (!target || !target.alive || target === p) return '대상을 다시 골라주세요';
   }
 
+  if (blind) {
+    const o = othersOf(G, p);
+    target = o[Math.floor(rand(G) * o.length)];
+  }
   p.energy -= card.cost;
   p.hand.splice(i, 1);
   p.plays[inst.id] = (p.plays[inst.id] || 0) + 1;
@@ -335,13 +434,15 @@ export function playCard(G, uid, cardU, targetUid, now) {
   G.last = { n: ++G.lastSeq, by: uid, id: inst.id, tg, round: G.round };
   const tname = target ? ` → ${target.name}` : card.scope === 'others' ? ' → 모든 상대' : card.scope === 'all' ? ' → 전원' : '';
   // 반응 카드는 무엇을 설치했는지 숨긴다
-  log(G, card.type === 'react' ? `${p.name} ▶ 반응 카드 설치` : `${p.name} ▶ ${card.name}${tname}`, 'play');
+  log(G, card.type === 'react' ? `${p.name} ▶ 반응 카드 설치` : `${p.name} ▶ ${card.name}${tname}${blind ? ` (${gname('blind')}: 무작위)` : ''}`, 'play');
   if (card.type === 'react') G.last.id = null;
 
   group(G, { k: 'card', by: uid, id: G.last.id, t: card.type, tg });
   const ctx = makeCtx(G, p, card, target);
   card.play(ctx);
   G.grp.tg = card.scope === 'random' || card.scope === 'top' ? [...new Set(ctx.hits)] : tg;
+  // 공개 기록: 반응 카드는 무엇인지 숨긴다 (id null)
+  (G.hist ||= []).push({ n: G.last.n, by: uid, id: G.last.id, tg: G.grp.tg, r: G.round });
   G.grp = null;
   if (card.type === 'atk') p.atkCount++;
   if (card.scope === 'random' || card.scope === 'top') {
@@ -451,13 +552,16 @@ export function removeCard(G, uid, cardU, now) {
   return null;
 }
 
+// 덱이 충분히 커진 사람에게만 카드 1장을 뺄 기회를 준다 (선택 사항)
 function afterPick(G, now) {
-  if (G.round % RULES.removeEvery === 0) {
-    G.phase = 'remove';
-    for (const u of Object.keys(G.pick)) G.pick[u] = { done: false };
-    G.deadline = now + RULES.pickMs;
-    log(G, '덱에서 카드 1장을 뺄 수 있어요', 'sys');
-  } else finishRound(G, now);
+  const who = G.round % RULES.removeEvery === 0
+    ? Object.keys(G.pick).filter(u => deckOf(P(G, u)).length >= RULES.removeOfferDeck)
+    : [];
+  if (!who.length) return finishRound(G, now);
+  G.phase = 'remove';
+  G.pick = Object.fromEntries(who.map(u => [u, { done: false }]));
+  G.deadline = now + RULES.pickMs;
+  log(G, `덱이 ${RULES.removeOfferDeck}장 이상인 사람은 카드 1장을 뺄 수 있어요`, 'sys');
 }
 
 function finishRound(G, now) {
@@ -508,14 +612,15 @@ export function publicView(G) {
     players[u] = {
       name: p.name, hp: p.hp, maxHp: p.maxHp, block: p.block, energy: p.energy, alive: p.alive,
       react: !!p.react, hand: p.hand.length, draw: p.draw.length, discard: p.discard.length,
-      char: p.char, deck: deckOf(p).length, drawPen: p.drawPen, enPen: p.enPen, keepBlock: p.keepBlock, out: p.out, stats: p.stats,
+      char: p.char, deck: deckOf(p).length, enPen: p.enPen,
+      st: p.st.hush ? { hush: p.st.hush } : p.st, stHidden: !!p.st.hush, keepBlock: p.keepBlock, out: p.out, stats: p.stats,
     };
   }
   const sudden = G.round >= RULES.suddenRound;
   return {
     gameId: G.gameId, round: G.round, turnNo: G.turnNo, cur: G.cur, phase: G.phase,
     deadline: G.deadline, order: G.order, players, log: G.log, fx: G.fx, last: G.last,
-    elim: G.elim, result: G.result, startedAt: G.startedAt, replay: G.replay,
+    elim: G.elim, result: G.result, startedAt: G.startedAt, replay: G.replay, hist: (G.hist || []).slice(-80),
     plan: G.plan?.acts.length ? { by: G.cur, n: G.plan.acts.length } : null,
     pick: G.pick ? Object.fromEntries(Object.entries(G.pick).map(([u, s]) => [u, s.done])) : null,
     suddenDmg: sudden ? RULES.suddenBase + (G.round - RULES.suddenRound) : null,
@@ -531,6 +636,7 @@ export function privateView(G, uid, prov = G) {
     gameId: G.gameId,
     hand: p.hand,
     energy: p.energy,
+    st: p.st,
     plan: mine ? G.plan.acts.map(a => ({ id: a.id, target: a.target })) : [],
     react: p.react,
     plays: p.plays,

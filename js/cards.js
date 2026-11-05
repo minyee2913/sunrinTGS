@@ -4,7 +4,8 @@
 // play(c): 엔진이 넘겨주는 c(카드 실행 도구)로 효과를 처리한다. engine.js의 makeCtx 참고.
 // react: 반응 카드가 공격을 받았을 때 하는 일 (engine.js의 attack 참고)
 //   nullify 피해 무효 / reduce n 피해 감소 / block n 방어도 획득 / reflect 비율만큼 막고 되돌림
-//   counter n 공격자에게 피해 / curse n 공격자 손패에 방해 카드 / penalty 공격자 다음 턴 드로우·에너지 -1
+//   counter n 공격자에게 피해 / curse n 공격자 손패에 방해 카드 / penalty 공격자에게 둔화 1, 다음 턴 에너지 -1
+// 기믹(둔화·실명·분신 등)은 js/gimmicks.js. c.gain(id, n) 나에게, c.give(대상, id, n) / c.giveOthers(id, n) 상대에게 쌓는다.
 
 export const TYPE = { atk: '공격', def: '방어', skill: '기술', react: '반응', curse: '방해' };
 export const SCOPE = { self: '자신', one: '상대 1명', others: '모든 상대', all: '자신 포함 전원', random: '무작위', top: '체력 1위 상대' };
@@ -23,17 +24,17 @@ export const CARDS = {
   p02: { name: '엄지의심판', cost: 1, type: 'atk', scope: 'one', tag: '연타',
     text: '피해 5. 대상의 방어도가 0이면 피해 +4.', play: c => c.attack(c.target, c.target.block ? 5 : 9) },
   p03: { name: '째려보기', cost: 1, type: 'atk', scope: 'one', tag: '방해',
-    text: '피해 4. 대상의 다음 턴 드로우 1장 감소.', play: c => { c.attack(c.target, 4); c.drawPenalty(c.target); } },
+    text: '피해 4. 대상에게 둔화 1.', play: c => { c.attack(c.target, 4); c.give(c.target, 'slow', 1); } },
   p04: { name: '눈덩이투척', cost: 1, type: 'atk', scope: 'one', tag: '연타',
     text: '피해 3을 2번 준다.', play: c => { c.attack(c.target, 3); c.attack(c.target, 3); } },
   p05: { name: '책상내려치기', cost: 2, type: 'atk', scope: 'one', tag: '연타',
     text: '피해 12.', play: c => c.attack(c.target, 12) },
   p06: { name: '복도돌진', cost: 1, type: 'atk', scope: 'one', tag: '연타',
     text: '피해 4. 카드 1장을 뽑는다.', play: c => { c.attack(c.target, 4); c.draw(1); } },
-  p07: { name: '분신소환', cost: 2, type: 'atk', scope: 'one', tag: '연타',
-    text: '피해 4를 3번 준다.', play: c => { for (let i = 0; i < 3; i++) c.attack(c.target, 4); } },
+  p07: { name: '분신소환', cost: 2, type: 'atk', scope: 'one', tag: '반격',
+    text: '피해 4. 분신 2를 얻는다.', play: c => { c.attack(c.target, 4); c.gain('clone', 2); } },
   p09: { name: '매운맛공격', cost: 1, type: 'atk', scope: 'one', tag: '폭탄',
-    text: '피해 8. 자신도 피해 2.', play: c => { c.attack(c.target, 8); c.selfDamage(2); } },
+    text: '부타 1을 얻은 뒤 피해 8. 자신도 피해 2.', play: c => { c.gain('buta', 1); c.attack(c.target, 8); c.selfDamage(2); } },
   p10: { name: '안경광선', cost: 1, type: 'atk', scope: 'one', tag: '방해',
     text: '대상의 방어도를 모두 없앤 뒤 피해 5.', play: c => { c.stripBlock(c.target); c.attack(c.target, 5); } },
   p11: { name: '필살공식', cost: 2, type: 'atk', scope: 'one', tag: '연타',
@@ -44,18 +45,18 @@ export const CARDS = {
   p15: { name: '진지한한방', cost: 2, type: 'atk', scope: 'one', tag: '연타',
     text: '피해 10. 대상의 체력이 15 이하면 피해 +6.', play: c => c.attack(c.target, c.target.hp <= 15 ? 16 : 10) },
   p16: { name: '무표정압박', cost: 1, type: 'atk', scope: 'one', tag: '방해',
-    text: '피해 4. 대상의 다음 턴 에너지 1 감소.', play: c => { c.attack(c.target, 4); c.energyPenalty(c.target); } },
+    text: '피해 4. 대상에게 성능평가 2.', play: c => { c.attack(c.target, 4); c.give(c.target, 'weak', 2); } },
   p39: { name: '마지막한입뺏기', cost: 1, type: 'atk', scope: 'one', tag: '반격',
     text: '피해 5. 체력에 들어간 피해만큼 회복한다.', play: c => c.heal(c.attack(c.target, 5)) },
-  p49: { name: '최후의승부', cost: 1, type: 'atk', scope: 'one', tag: '폭탄',
-    text: '피해 5. 내 체력이 20 이하면 피해 +6.', play: c => c.attack(c.target, c.me.hp <= 20 ? 11 : 5) },
+  p49: { name: '최후의승부', cost: 1, type: 'skill', scope: 'self', tag: '폭탄',
+    text: '치녀 2를 얻는다. 내 체력이 20 이하면 치녀 +2.', play: c => c.gain('str', c.me.hp <= 20 ? 4 : 2) },
   p50: { name: '이제내차례', cost: 1, type: 'atk', scope: 'one', tag: '반격',
     text: '피해 4. 지난 내 턴 이후 나를 공격한 상대 1명당 피해 +2 (최대 +6).',
     play: c => c.attack(c.target, 4 + Math.min(6, 2 * c.recentAttackers)) },
   p53: { name: '꼬치한방', cost: 0, type: 'atk', scope: 'one', tag: '폭탄', limit: 1,
-    text: '피해 4. 자신도 피해 2. 한 턴에 1번.', play: c => { c.attack(c.target, 4); c.selfDamage(2); } },
+    text: '부타 2를 얻은 뒤 피해 3. 한 턴에 1번.', play: c => { c.gain('buta', 2); c.attack(c.target, 3); } },
   p57: { name: '너무가까워', cost: 1, type: 'atk', scope: 'one', tag: '방해',
-    text: '대상의 반응 카드를 발동 없이 없앤 뒤 피해 5.', play: c => { c.stripReact(c.target); c.attack(c.target, 5); } },
+    text: '대상의 반응 카드를 발동 없이 없앤 뒤 피해 4. 대상에게 실명 2.', play: c => { c.stripReact(c.target); c.attack(c.target, 4); c.give(c.target, 'blind', 2); } },
   p62: { name: '병뚜껑탄환', cost: 0, type: 'atk', scope: 'one', tag: '연타', limit: 2,
     text: '피해 2. 카드 1장을 뽑는다. 한 턴에 2번까지.', play: c => { c.attack(c.target, 2); c.draw(1); } },
   p63: { name: '강제로그아웃', cost: 2, type: 'atk', scope: 'one', tag: '방해',
@@ -78,8 +79,8 @@ export const CARDS = {
     text: '모든 상대에게 피해 3.', play: c => c.attackOthers(3) },
   p44: { name: '전부날아가', cost: 2, type: 'atk', scope: 'others', tag: '폭탄',
     text: '모든 상대의 방어도를 없앤 뒤 피해 4.', play: c => c.others().forEach(t => { c.stripBlock(t); c.attack(t, 4); }) },
-  p45: { name: '분위기반전', cost: 1, type: 'atk', scope: 'top', tag: '반격',
-    text: '체력이 가장 높은 상대에게 피해 8.', play: c => c.attack(c.topOther(), 8) },
+  p45: { name: '분위기반전', cost: 1, type: 'skill', scope: 'all', tag: '폭탄',
+    text: '자신을 포함한 전원에게 낙원 1.', play: c => { c.gain('paradise', 1); c.giveOthers('paradise', 1); } },
   p46: { name: '눈사태주의', cost: 1, type: 'atk', scope: 'all', tag: '폭탄',
     text: '자신을 포함한 전원에게 피해 4.', play: c => { c.attackOthers(4); c.selfDamage(4); } },
   p47: { name: '다같이웃자', cost: 1, type: 'atk', scope: 'others', tag: '폭탄',
@@ -88,11 +89,9 @@ export const CARDS = {
     text: '나를 포함한 무작위 생존자에게 피해 4를 5번 준다.',
     play: c => { for (let i = 0; i < 5; i++) { const t = c.randomAlive(true); if (t === c.me) c.selfDamage(4); else if (t) c.attack(t, 4); } } },
   p52: { name: '충격의외침', cost: 2, type: 'atk', scope: 'others', tag: '방해',
-    text: '모든 상대에게 피해 3. 모든 상대의 다음 턴 드로우 1장 감소.',
-    play: c => c.others().forEach(t => { c.attack(t, 3); c.drawPenalty(t); }) },
+    text: '모든 상대에게 피해 3, 둔화 1.', play: c => c.others().forEach(t => { c.attack(t, 3); c.give(t, 'slow', 1); }) },
   p60: { name: '노래방궁극기', cost: 3, type: 'atk', scope: 'others', tag: '폭탄',
-    text: '모든 상대에게 피해 7. 모든 상대의 다음 턴 드로우 1장 감소.',
-    play: c => c.others().forEach(t => { c.attack(t, 7); c.drawPenalty(t); }) },
+    text: '모든 상대에게 피해 7, 둔화 1.', play: c => c.others().forEach(t => { c.attack(t, 7); c.give(t, 'slow', 1); }) },
   p64: { name: '바람의장난', cost: 1, type: 'atk', scope: 'random', tag: '연타',
     text: '무작위 상대에게 피해 3을 3번 준다.', play: c => { for (let i = 0; i < 3; i++) { const t = c.randomAlive(false); if (t) c.attack(t, 3); } } },
   p68: { name: '우정의합동기', cost: 3, type: 'atk', scope: 'others', tag: '폭탄',
@@ -104,7 +103,7 @@ export const CARDS = {
 
   // ── 방어 ──
   p18: { name: '괜찮아엄지척', cost: 1, type: 'def', scope: 'self', tag: '반격',
-    text: '방어도 5. 체력 3 회복.', play: c => { c.block(5); c.heal(3); } },
+    text: '방어도 5. 줴줴이야 2를 얻는다.', play: c => { c.block(5); c.gain('dex', 2); } },
   p19: { name: '빙벽세우기', cost: 2, type: 'def', scope: 'self', tag: '반격',
     text: '방어도 12. 반응 카드가 설치되어 있으면 방어도 +4.', play: c => c.block(c.me.react ? 16 : 12) },
   p20: { name: '책상엄폐', cost: 1, type: 'def', scope: 'self', tag: '연타',
@@ -114,7 +113,7 @@ export const CARDS = {
   p23: { name: '계산된방어', cost: 1, type: 'def', scope: 'self', tag: '연타',
     text: '방어도 3. 지금 손패 1장당 방어도 +2.', play: c => c.block(3 + 2 * c.me.hand.length) },
   p24: { name: '든든한지원', cost: 0, type: 'def', scope: 'self', tag: '반격', limit: 1,
-    text: '방어도 4. 한 턴에 1번.', play: c => c.block(4) },
+    text: '줴줴이야 1을 얻은 뒤 방어도 3. 한 턴에 1번.', play: c => { c.gain('dex', 1); c.block(3); } },
   p25: { name: '귀찮음의장벽', cost: 2, type: 'def', scope: 'self', tag: '반격',
     text: '방어도 10. 다음 내 턴 시작 때 방어도가 사라지지 않는다.', play: c => { c.block(10); c.keepBlock(); } },
   p51: { name: '볼빵빵방어', cost: 1, type: 'def', scope: 'self', tag: '반격',
@@ -124,7 +123,7 @@ export const CARDS = {
   p73: { name: '여기서버틴다', cost: 1, type: 'def', scope: 'self', tag: '반격',
     text: '방어도 5. 내 체력이 10 이하면 방어도 15.', play: c => c.block(c.me.hp <= 10 ? 15 : 5) },
   p82: { name: '이동식개발팀', cost: 2, type: 'def', scope: 'self', tag: '연타',
-    text: '방어도 8. 카드 2장을 뽑는다.', play: c => { c.block(8); c.draw(2); } },
+    text: '방어도 8. AI 2를 얻는다.', play: c => { c.block(8); c.gain('ai', 2); } },
   p87: { name: '이불갑옷', cost: 2, type: 'def', scope: 'self', tag: '반격',
     text: '방어도 14.', play: c => c.block(14) },
   p88: { name: '눈감고버티기', cost: 0, type: 'def', scope: 'self', tag: '반격',
@@ -137,12 +136,12 @@ export const CARDS = {
     text: '반응 설치: 다음 공격 피해의 절반(내림)을 막고 그만큼 공격자에게 돌려준다.' },
   p27: { name: '눈덩이되돌리기', cost: 1, type: 'react', scope: 'self', tag: '반격', react: { counter: 6 },
     text: '반응 설치: 다음 공격을 받은 뒤 공격자에게 피해 6.' },
-  p28: { name: '가짜나', cost: 1, type: 'react', scope: 'self', tag: '반격', react: { reduce: 4, drawBonus: 1 },
-    text: '반응 설치: 다음 공격 피해를 4 줄이고, 내 다음 턴에 카드 1장을 더 뽑는다.' },
+  p28: { name: '가짜나', cost: 1, type: 'skill', scope: 'self', tag: '반격',
+    text: '분신 1을 얻는다. 카드 1장을 뽑는다.', play: c => { c.gain('clone', 1); c.draw(1); } },
   p29: { name: '렌즈반사', cost: 2, type: 'react', scope: 'self', tag: '반격', react: { reflect: 1 },
     text: '반응 설치: 다음 공격 피해를 모두 막고 그만큼 공격자에게 돌려준다.' },
   p30: { name: '입력반전', cost: 1, type: 'react', scope: 'self', tag: '방해', react: { penalty: true },
-    text: '반응 설치: 다음에 나를 공격한 사람의 다음 턴 드로우 1장, 에너지 1 감소.' },
+    text: '반응 설치: 다음에 나를 공격한 사람에게 둔화 1, 다음 턴 에너지 1 감소.' },
   p54: { name: '수상한미소', cost: 1, type: 'react', scope: 'self', tag: '방해', react: { curse: 2 },
     text: "반응 설치: 다음에 나를 공격한 사람의 손패에 '속이부글부글' 2장을 넣는다." },
   p58: { name: '옆으로쏙', cost: 0, type: 'react', scope: 'self', tag: '반격', react: { reduce: 4 },
@@ -166,19 +165,19 @@ export const CARDS = {
   p34: { name: '잠깐눈붙임', cost: 1, type: 'skill', scope: 'self', tag: '폭탄',
     text: '체력 10 회복 후 즉시 내 턴 종료.', play: c => { c.heal(10); c.endTurn(); } },
   p35: { name: '응원받기', cost: 2, type: 'skill', scope: 'self', tag: '반격',
-    text: '체력 8 회복. 카드 1장을 뽑는다.', play: c => { c.heal(8); c.draw(1); } },
+    text: '방어도 6. 쌀먹단 1을 얻는다.', play: c => { c.block(6); c.gain('rice', 1); } },
   p55: { name: '전화찬스', cost: 1, type: 'skill', scope: 'self', tag: '연타',
     text: '카드 3장을 뽑는다.', play: c => c.draw(3) },
   p56: { name: '한잔의기적', cost: 2, type: 'skill', scope: 'self', tag: '반격', exhaust: true,
-    text: '체력 12 회복. 사용하면 덱에서 사라진다.', play: c => c.heal(12) },
+    text: '체력 8 회복. 만준 2를 얻는다. 사용하면 덱에서 사라진다.', play: c => { c.heal(8); c.gain('manjun', 2); } },
   p59: { name: '도발하기', cost: 0, type: 'skill', scope: 'self', tag: '폭탄', limit: 1,
-    text: '에너지 1을 얻는다. 자신에게 피해 3. 한 턴에 1번.', play: c => { c.gainEnergy(1); c.selfDamage(3, true); } },
+    text: '치녀 2를 얻는다. 자신에게 피해 3. 한 턴에 1번.', play: c => { c.gain('str', 2); c.selfDamage(3, true); } },
   p70: { name: '계획대로', cost: 1, type: 'skill', scope: 'self', tag: '연타', limit: 1,
-    text: '카드 2장을 뽑고 에너지 1을 얻는다. 한 턴에 1번.', play: c => { c.draw(2); c.gainEnergy(1); } },
+    text: '쉿 2를 얻는다. 카드 2장을 뽑는다. 한 턴에 1번.', play: c => { c.gain('hush', 2); c.draw(2); } },
   p74: { name: '한모금충전', cost: 0, type: 'skill', scope: 'self', tag: '반격', limit: 1,
     text: '체력 3 회복. 한 턴에 1번.', play: c => c.heal(3) },
   p77: { name: '누워서회복', cost: 1, type: 'skill', scope: 'self', tag: '반격',
-    text: '체력 8 회복. 내 다음 턴 드로우 1장 감소.', play: c => { c.heal(8); c.drawPenalty(c.me); } },
+    text: '만준 2를 얻는다. 체력 3 회복.', play: c => { c.gain('manjun', 2); c.heal(3); } },
   p81: { name: '완전방전', cost: 0, type: 'skill', scope: 'self', tag: '폭탄',
     text: '남은 에너지 1당 체력 3 회복 후 즉시 내 턴 종료.', play: c => { c.heal(3 * c.me.energy); c.me.energy = 0; c.endTurn(); } },
   p83: { name: '전원집합', cost: 2, type: 'skill', scope: 'self', tag: '반격',
@@ -192,27 +191,31 @@ export const CARDS = {
   p38: { name: '신분바꾸기', cost: 1, type: 'skill', scope: 'one', tag: '방해',
     text: '나와 대상의 방어도를 맞바꾼다.', play: c => c.swapBlock(c.target) },
   p40: { name: '시야차단', cost: 2, type: 'skill', scope: 'others', tag: '방해',
-    text: '모든 상대의 다음 턴 드로우 1장 감소.', play: c => c.others().forEach(t => c.drawPenalty(t)) },
+    text: '모든 상대에게 실명 2.', play: c => c.giveOthers('blind', 2) },
   p41: { name: '생각멈춤', cost: 2, type: 'skill', scope: 'one', tag: '방해',
-    text: '대상의 다음 턴 드로우 1장, 에너지 1 감소.', play: c => { c.drawPenalty(c.target); c.energyPenalty(c.target); } },
+    text: '대상에게 둔화 2. 대상의 다음 턴 에너지 1 감소.', play: c => { c.give(c.target, 'slow', 2); c.energyPenalty(c.target); } },
   p42: { name: '시끄러운방해', cost: 1, type: 'skill', scope: 'one', tag: '방해',
     text: '대상의 반응 카드를 발동 없이 없앤다. 카드 1장을 뽑는다.', play: c => { c.stripReact(c.target); c.draw(1); } },
   p43: { name: '배터리없음', cost: 1, type: 'skill', scope: 'one', tag: '방해',
     text: '대상의 다음 턴 에너지 1 감소. 카드 1장을 뽑는다.', play: c => { c.energyPenalty(c.target); c.draw(1); } },
   p61: { name: '무언의압박', cost: 1, type: 'skill', scope: 'one', tag: '방해',
-    text: '대상의 방어도를 모두 없앤다. 카드 1장을 뽑는다.', play: c => { c.stripBlock(c.target); c.draw(1); } },
+    text: '대상의 방어도를 모두 없애고 성능평가 2.', play: c => { c.stripBlock(c.target); c.give(c.target, 'weak', 2); } },
   p69: { name: '수상한칭찬', cost: 1, type: 'skill', scope: 'one', tag: '방해',
     text: "대상의 체력 3 회복. 대상의 버린 카드 더미에 '속이부글부글' 2장을 넣는다.",
     play: c => { c.healOther(c.target, 3); c.addCards(c.target, CURSE, 2, 'discard'); } },
   p75: { name: '빤히보기', cost: 1, type: 'skill', scope: 'one', tag: '방해',
-    text: '대상의 다음 턴 드로우 1장 감소. 카드 1장을 뽑는다.', play: c => { c.drawPenalty(c.target); c.draw(1); } },
+    text: '대상에게 둔화 1. 카드 1장을 뽑는다.', play: c => { c.give(c.target, 'slow', 1); c.draw(1); } },
   p89: { name: '졸음의동맹', cost: 1, type: 'skill', scope: 'others', tag: '방해',
-    text: '모든 상대의 다음 턴 드로우 1장 감소 후 즉시 내 턴 종료.', play: c => { c.others().forEach(t => c.drawPenalty(t)); c.endTurn(); } },
+    text: '모든 상대에게 둔화 1 후 즉시 내 턴 종료.', play: c => { c.giveOthers('slow', 1); c.endTurn(); } },
 
   // ── 방해 카드 (보상으로 나오지 않음) ──
   p79: { name: '속이부글부글', cost: 1, type: 'curse', scope: 'self', curse: true, exhaust: true, endInHand: 2,
     text: '사용하면 덱에서 사라진다. 턴이 끝날 때 손패에 있으면 자신에게 피해 2.', play: () => {} },
 };
+
+// 기본 카드: 시작 덱에 들어가고 라운드 보상으로는 나오지 않는다
+const BASIC = ['p01', 'p17', 'p85', 'p04', 'p06', 'p13', 'p20', 'p31', 'p58'];
+for (const id of BASIC) CARDS[id].basic = true;
 
 for (const [id, c] of Object.entries(CARDS)) {
   c.id = id;
@@ -220,7 +223,11 @@ for (const [id, c] of Object.entries(CARDS)) {
   c.play ??= x => x.installReact();
 }
 
-// 시작 덱 10장: 기본 공격 5, 기본 방어 4, 카드 뽑기 1
-export const STARTER = ['p01', 'p01', 'p01', 'p01', 'p01', 'p17', 'p17', 'p17', 'p17', 'p85'];
+// 시작 덱 12장: 공격 6, 방어 3, 반응 1, 회복 1, 카드 뽑기 1
+export const STARTER = [
+  'p01', 'p01', 'p01', 'p04', 'p06', 'p13', // 주먹부터 3, 눈덩이투척, 복도돌진, 마이크공격
+  'p17', 'p17', 'p20', 'p58',               // 철벽팔뚝 2, 책상엄폐, 옆으로쏙
+  'p31', 'p85',                             // 국물한입, 머리굴리는중
+];
 
 export const REWARD_POOL = Object.values(CARDS).filter(c => !c.basic && !c.curse).map(c => c.id);
