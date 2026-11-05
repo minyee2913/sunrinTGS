@@ -292,7 +292,7 @@ function requestHost() {
   if (!isOnline(S.lobby[S.meta.hostId])) return toast('호스트가 연결돼 있지 않아요. 잠시 뒤 자동으로 바뀌어요');
   if (liveVote()) return toast('이미 진행 중인 호스트 투표가 있어요');
   sendHostReq('hostReq');
-  toast(onlineMembers().length <= 2 ? '호스트를 가져오는 중…' : '호스트 투표를 열었어요');
+  toast('호스트 요청을 보냈어요');
 }
 
 function castVote(yes) {
@@ -338,14 +338,11 @@ function hostModalHTML() {
   const amHost = S.meta.hostId === S.uid;
   const members = onlineMembers();
   const others = members.filter(([u]) => u !== S.uid);
-  const need = Math.floor(members.length / 2) + 1;
   const body = amHost
     ? `<p class="soft small">접속 중인 사람에게 호스트를 넘길 수 있어요. 게임 중이어도 그대로 이어져요.</p>
        <div class="host-list">${others.map(([u, m]) => `<div class="host-row">${ava(u, 'sm')}<b>${esc(m.name)}</b>
          <button class="btn ghost" data-act="handTo" data-u="${u}">호스트 넘기기</button></div>`).join('') || '<p class="dim">넘겨받을 사람이 없어요.</p>'}</div>`
-    : `<p class="soft small">지금 호스트는 <b>${S.meta.hostId ? esc(name(S.meta.hostId)) : '없음'}</b> 님이에요. ${members.length <= 2
-        ? '지금은 2명뿐이라 요청하면 <b>바로</b> 내가 호스트가 돼요.'
-        : `호스트 요청을 보내면 ${RULES.voteMs / 1000}초 동안 투표가 열리고, 접속 중인 ${members.length}명 중 <b>${need}명</b> 이상이 찬성하면(내 표 포함) 내가 호스트가 돼요.`}</p>
+    : `<p class="soft small">지금 호스트는 <b>${S.meta.hostId ? esc(name(S.meta.hostId)) : '없음'}</b> 님이에요. 호스트 요청을 보내면 투표가 열리고, 접속 중인 사람의 과반수가 찬성하면 내가 호스트가 돼요.</p>
        <button class="btn primary cut" data-act="hostReq" ${liveVote() ? 'disabled' : ''}><b>${liveVote() ? '투표 진행 중' : '호스트 요청'}</b></button>`;
   return `<div class="modal"><div class="modal-box host-modal"><div class="modal-head"><div class="stack">${lbl('HOST', 'amber')}<h2>${amHost ? '호스트 넘기기' : '호스트 요청'}</h2></div><button class="btn ghost" data-act="close">닫기</button></div>
     <div class="modal-body">${body}</div></div></div>`;
