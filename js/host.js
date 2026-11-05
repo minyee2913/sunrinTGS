@@ -38,6 +38,16 @@ export class Host {
     this.G = null;
   }
 
+  // 호스트를 넘기기 전에: 새 요청은 그만 받고, 이미 받은 요청은 끝까지 처리해서 hs에 남긴다
+  async halt() {
+    clearTimeout(this.retry);
+    this.offReq?.();
+    clearInterval(this.timer);
+    this.timer = null;
+    await this.q;
+    this.G = null;
+  }
+
   enqueue(fn) {
     this.q = this.q.then(fn).catch(e => console.error('호스트 처리 오류', e));
     return this.q;

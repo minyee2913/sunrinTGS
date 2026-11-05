@@ -20,7 +20,7 @@ const S = {
   net: null, uid: null, inst: rid(), ready: false,
   meta: {}, lobby: {}, pub: null, priv: null,
   joined: false, presenceOff: null,
-  host: null, hostOffSince: null, claiming: false,
+  host: null, hostOffSince: null, claiming: false, handing: null, vote: null,
   sel: null, pickSel: null, removeSel: null, pickKey: '',
   pending: null, pendingAt: 0, hiddenU: null,
   modal: null, fxSeen: -1, fxGame: null, lastCur: undefined, pendingFlash: false,
@@ -62,7 +62,20 @@ async function boot() {
   try { S.myChar = JSON.parse(store.get('hp_char_' + S.uid)); } catch {}
   if (!validChar(S.myChar)) S.myChar = defaultChar(S.uid);
 
-  S.net.on('meta', v => { S.meta = v || {}; update(); });
+  S.net.on('meta', v => {
+    const prev = S.meta.hostId;
+    S.meta = v || {};
+    const now = S.meta.hostId;
+    if (S.ready && prev && now && prev !== now) toast(now === S.uid ? '내가 호스트가 됐어요' : `호스트가 ${name(now)} 님으로 바뀌었어요`);
+    update();
+  });
+  S.net.on('vote', v => {
+    const mine = S.vote?.by === S.uid;
+    S.vote = v;
+    // 내 요청이 사라졌는데 호스트가 되지 않았으면 통과하지 못한 것
+    if (mine && !v) setTimeout(() => { if (S.meta.hostId !== S.uid) toast('호스트 요청이 과반수 찬성을 얻지 못했어요'); }, 800);
+    update();
+  });
   S.net.on('lobby', v => { S.lobby = v || {}; update(); });
   S.net.on('pub', v => { S.pub = v?.s ? JSON.parse(v.s) : null; update(); });
   S.net.on('priv/' + S.uid, v => { S.priv = v?.s ? JSON.parse(v.s) : null; update(); });
@@ -138,6 +151,8 @@ function update() {
     S.seenMe = false;
   }
   hostDuty();
+  voteDuty();
+  renderVote();
   checkAck();
   // 게임이 끝나거나 바뀌면 재생 중인 전투 연출을 바로 멈춘다 (대기실로 못 돌아가는 일이 없게)
   if (S.replay && (S.meta.status !== 'playing' || S.pub?.gameId !== S.replayGame)) S.replay.stop();
@@ -150,6 +165,10 @@ function update() {
 // 호스트 uid의 활성 탭 하나만 판정기를 돌린다. 호스트가 끊기면 유예 시간 뒤 가장 먼저 들어온 접속자가 이어받는다.
 function hostDuty() {
   const m = S.meta;
+  if (S.handing) {
+    if (m.hostId === S.uid) return; // 넘기는 중 (반영될 때까지 판정기를 다시 켜지 않는다)
+    S.handing = null;
+  }
   if (!S.joined || !active()) return stopHost();
   if (m.hostId === S.uid) {
     S.hostOffSince = null;
@@ -206,6 +225,108 @@ async function claimHost(prev) {
     console.error('호스트 지정 실패', e);
   }
   S.claiming = false;
+}
+
+// ── 호스트 넘기기 ──
+// 호스트는 접속 중인 사람에게 직접 넘길 수 있다. 다른 사람은 투표를 열 수 있고,
+// 접속 중인 사람(호스트 포함)의 과반수가 찬성하면 호스트 탭이 요청자에게 넘긴다.
+// 넘길 때는 이미 받은 요청까지 처리해 hs에 남기고 멈추므로, 게임 중이어도 새 호스트가 그대로 이어간다.
+async function handOver(to) {
+  if (!S.host || S.handing || to === S.uid || !isOnline(S.lobby[to])) return;
+  S.handing = to;
+  try {
+    await S.host.halt();
+    S.host = null;
+    await S.net.update({ 'meta/hostId': to, 'meta/hostInst': null, vote: null });
+  } catch (e) {
+    console.error('호스트 넘기기 실패', e);
+    toast('호스트를 넘기지 못했어요');
+    S.handing = null;
+  }
+  update();
+}
+
+const liveVote = () => (S.vote?.by && S.net.now() - S.vote.at < RULES.voteMs ? S.vote : null);
+function voteTally(v) {
+  const voters = onlineMembers().map(([u]) => u);
+  const yes = voters.filter(u => u === v.by || v.v?.[u] === true).length;
+  const no = voters.filter(u => u !== v.by && v.v?.[u] === false).length;
+  return { yes, no, need: Math.floor(voters.length / 2) + 1, total: voters.length };
+}
+
+// 투표 결과는 호스트 탭이 판단한다
+function voteDuty() {
+  if (!S.host || S.handing || !S.vote) return;
+  const v = liveVote();
+  if (v && v.by !== S.uid && isOnline(S.lobby[v.by])) {
+    const t = voteTally(v);
+    if (t.yes >= t.need) return handOver(v.by);
+    if (t.total - t.no >= t.need) return;
+  }
+  // 시간이 지났거나, 요청자가 나갔거나, 더 이상 과반수가 될 수 없으면 닫는다
+  S.vote = null;
+  S.net.set('vote', null);
+}
+
+function requestHost() {
+  if (!S.joined || S.meta.hostId === S.uid) return;
+  if (liveVote()) return toast('이미 진행 중인 호스트 투표가 있어요');
+  S.net.set('vote', { by: S.uid, at: S.net.now(), v: { [S.uid]: true } })
+    .catch(e => { console.error(e); toast('호스트 요청을 보내지 못했어요'); });
+}
+
+function castVote(yes) {
+  const v = liveVote();
+  if (!v || v.by === S.uid) return;
+  S.net.set(`vote/v/${S.uid}`, yes).catch(e => console.error(e));
+}
+
+// 투표 창은 전투 연출 중에도 보이도록 화면과 따로 그린다
+let lastVote = '';
+function renderVote() {
+  const el = $('#vote');
+  if (!el || !S.ready) return;
+  const v = liveVote();
+  let html = '';
+  if (v && S.joined && isOnline(S.lobby[v.by])) {
+    const t = voteTally(v);
+    const left = Math.max(0, Math.ceil((RULES.voteMs - (S.net.now() - v.at)) / 1000));
+    const my = v.v?.[S.uid];
+    const amHost = S.meta.hostId === S.uid;
+    const ctl = v.by === S.uid
+      ? '<button class="btn ghost" data-act="voteCancel">요청 취소</button>'
+      : `<button class="btn ghost ${my === false ? 'on' : ''}" data-act="voteNo">${amHost ? '거절' : '반대'}</button>
+         <button class="btn primary ${my === true ? 'on' : ''}" data-act="voteYes"><b>${amHost ? '넘겨주기' : '찬성'}</b></button>`;
+    html = `<div class="vote-box">
+      <div class="vote-head">${lbl('HOST VOTE', 'amber')}<span class="mono dim">${left}s</span></div>
+      <p><b>${esc(name(v.by))}</b> 님이 호스트를 맡겠다고 해요</p>
+      <div class="vote-bar"><i style="width:${Math.min(100, (t.yes / t.need) * 100)}%"></i></div>
+      <p class="soft small">찬성 <b class="mono">${t.yes}</b> / 필요 <b class="mono">${t.need}</b> · 반대 <b class="mono">${t.no}</b>${v.by !== S.uid && my != null ? ` · ${my ? '찬성' : '반대'}했어요` : ''}</p>
+      <div class="vote-ctl">${ctl}</div>
+    </div>`;
+  }
+  if (html !== lastVote) {
+    el.innerHTML = html;
+    lastVote = html;
+  }
+}
+
+// 게임·결과 화면 상단의 HOST 버튼 (누르면 호스트 창)
+const hostBtn = () => (S.joined ? '<button class="tg" data-act="hostMenu" title="호스트 넘기기 · 요청">HOST</button>' : '');
+
+function hostModalHTML() {
+  const amHost = S.meta.hostId === S.uid;
+  const members = onlineMembers();
+  const others = members.filter(([u]) => u !== S.uid);
+  const need = Math.floor(members.length / 2) + 1;
+  const body = amHost
+    ? `<p class="soft small">접속 중인 사람에게 호스트를 넘길 수 있어요. 게임 중이어도 그대로 이어져요.</p>
+       <div class="host-list">${others.map(([u, m]) => `<div class="host-row">${ava(u, 'sm')}<b>${esc(m.name)}</b>
+         <button class="btn ghost" data-act="handTo" data-u="${u}">호스트 넘기기</button></div>`).join('') || '<p class="dim">넘겨받을 사람이 없어요.</p>'}</div>`
+    : `<p class="soft small">지금 호스트는 <b>${S.meta.hostId ? esc(name(S.meta.hostId)) : '없음'}</b> 님이에요. 호스트 요청을 보내면 ${RULES.voteMs / 1000}초 동안 투표가 열리고, 접속 중인 ${members.length}명 중 <b>${need}명</b> 이상이 찬성하면(내 표 포함) 내가 호스트가 돼요.</p>
+       <button class="btn primary cut" data-act="hostReq" ${liveVote() ? 'disabled' : ''}><b>${liveVote() ? '투표 진행 중' : '호스트 요청'}</b></button>`;
+  return `<div class="modal"><div class="modal-box host-modal"><div class="modal-head"><div class="stack">${lbl('HOST', 'amber')}<h2>${amHost ? '호스트 넘기기' : '호스트 요청'}</h2></div><button class="btn ghost" data-act="close">닫기</button></div>
+    <div class="modal-body">${body}</div></div></div>`;
 }
 
 // ── 행동 요청 ──
@@ -444,6 +565,24 @@ function onClick(e) {
       S.presenceOff = S.net.presence(`lobby/${S.uid}/conn/${S.inst}`);
       return;
     case 'start': return startGame();
+    case 'hostMenu': S.modal = 'host'; return render();
+    case 'hostReq':
+      requestHost();
+      if (S.modal === 'host') S.modal = null;
+      return render();
+    case 'handTo': {
+      const u = el.dataset.u;
+      if (!confirm(`${name(u)} 님에게 호스트를 넘길까요?`)) return;
+      if (S.modal === 'host') S.modal = null;
+      handOver(u);
+      return render();
+    }
+    case 'voteYes': return castVote(true);
+    case 'voteNo': return castVote(false);
+    case 'voteCancel':
+      S.vote = null;
+      S.net.set('vote', null);
+      return renderVote();
     case 'rematch': return S.host?.toLobby(null, S.lobby);
     case 'abort':
       // 실수로 누르지 않게 5초 안에 한 번 더 눌러야 종료
@@ -518,7 +657,7 @@ async function doJoin() {
 
 function startGame() {
   if (!S.host) return;
-  const list = onlineMembers().slice(0, RULES.maxPlayers);
+  const list = onlineMembers();
   if (list.length < RULES.minPlayers) return toast(`${RULES.minPlayers}명 이상 모여야 시작할 수 있어요`);
   S.host.startGame(list.map(([uid, m]) => ({ uid, name: m.name, char: charOf(uid) })));
 }
@@ -627,7 +766,7 @@ function entryHTML() {
       </div>
       ${modeBanner()}
     </main>
-    <footer class="t-foot"><span>${RULES.minPlayers}–${RULES.maxPlayers}명 · 한 판 약 10분</span>${lbl('PRESS 참가하기 TO DEPLOY', 'dim')}</footer>
+    <footer class="t-foot"><span>${RULES.minPlayers}명부터 · 인원 제한 없음</span>${lbl('PRESS 참가하기 TO DEPLOY', 'dim')}</footer>
   </div>`;
 }
 
@@ -647,15 +786,15 @@ function lobbyHTML() {
   const isHost = S.meta.hostId === S.uid && S.host;
   const n = list.length;
   const canStart = n >= RULES.minPlayers;
-  const players = list.slice(0, RULES.maxPlayers);
   const slot = ([u, m], extra = '') => `<div class="slot ${u === S.uid ? 'me' : ''} ${extra}">
       <i class="bar"></i>${ava(u, 'slotava')}
       <span class="nm">${esc(m.name)}${u === S.uid ? '<em>나</em>' : ''}</span>
       ${u === S.meta.hostId ? lbl('HOST', 'amber') : ''}
+      ${S.host && u !== S.uid && extra !== 'off' ? `<button class="link-btn small" data-act="handTo" data-u="${u}">넘기기</button>` : ''}
       ${extra === 'off' ? lbl('OFFLINE', 'dim') : extra === 'extra' ? lbl('SPECTATE', 'dim') : lbl('READY', 'cyan')}
     </div>`;
-  const empties = Array.from({ length: Math.max(0, RULES.maxPlayers - players.length) }, (_, i) =>
-    `<div class="slot empty"><span class="mono">${pad2(players.length + i + 1)}</span>빈 자리 · 초대 대기 중</div>`).join('');
+  const empties = n < RULES.minPlayers
+    ? `<div class="slot empty"><span class="mono">${pad2(n + 1)}</span>빈 자리 · 초대 대기 중</div>` : '';
   const me = S.lobby[S.uid];
   return `<div class="screen lobby2">
     <header class="topbar2">
@@ -666,10 +805,9 @@ function lobbyHTML() {
     ${S.meta.notice ? `<div class="banner warn"><span class="lbl red">NOTICE</span>${esc(S.meta.notice)}</div>` : ''}
     <div class="lobby-grid">
       <section class="col squad">
-        <div class="col-head">${lbl('SQUAD')}<span class="count mono">${Math.min(n, RULES.maxPlayers)}<span class="dim"> / ${RULES.maxPlayers}</span></span></div>
+        <div class="col-head">${lbl('SQUAD')}<span class="count mono">${n}<span class="dim">명</span></span></div>
         <div class="slots">
-          ${players.map(e => slot(e)).join('')}
-          ${list.slice(RULES.maxPlayers).map(e => slot(e, 'extra')).join('')}
+          ${list.map(e => slot(e)).join('')}
           ${offline.map(e => slot(e, 'off')).join('')}
           ${empties}
         </div>
@@ -698,7 +836,8 @@ function lobbyHTML() {
         <span class="soft">${n}명 준비 완료 · 최소 ${RULES.minPlayers}명</span>
         ${isHost
           ? `<button class="btn primary cut2 start" data-act="start" ${canStart ? '' : 'disabled'}><b>게임 시작</b><span class="mono">START →</span></button>`
-          : `<span class="wait">${S.meta.hostId ? `${lbl('HOST', 'amber')} ${esc(name(S.meta.hostId))} 님이 시작하길 기다리는 중` : '호스트를 정하는 중…'}</span>`}
+          : `<span class="wait">${S.meta.hostId ? `${lbl('HOST', 'amber')} ${esc(name(S.meta.hostId))} 님이 시작하길 기다리는 중` : '호스트를 정하는 중…'}</span>
+             ${S.joined && S.meta.hostId ? `<button class="btn ghost host-req" data-act="hostReq" ${liveVote() ? 'disabled' : ''}>호스트 요청</button>` : ''}`}
       </div>
     </footer>
   </div>`;
@@ -866,11 +1005,12 @@ function battleHTML() {
       <div class="tb-right">
         ${!me ? '<span class="tag">관전 중</span>' : ''}
         ${toggles()}
+        ${hostBtn()}
         ${S.host ? `<button class="tg abort ${Date.now() - S.abortArm < 5000 ? 'armed' : ''}" data-act="abort">${Date.now() - S.abortArm < 5000 ? '한 번 더 누르면 종료' : 'END'}</button>` : ''}
       </div>
     </header>
     <div class="played">${lbl('PLAYED', 'played-lbl')}${histStripHTML()}</div>
-    <main class="field n${p.order.length}">
+    <main class="field n${p.order.length} ${p.order.length > 6 ? 'many' : ''}" style="--np:${p.order.length}">
       <div class="field-floor"></div>
       <div class="side l">${l.map(u => fighterHTML(u, false, plan)).join('')}</div>
       <div class="side r">${r.map(u => fighterHTML(u, true, plan)).join('')}</div>
@@ -917,7 +1057,7 @@ function resultHTML() {
   };
   const isHost = S.meta.hostId === S.uid && S.host;
   return `<div class="screen result">
-    <header class="topbar2"><div class="tb-left"><div class="brand">허리펴라</div><i class="vsep"></i><div class="stack">${lbl('MATCH RESULT', 'amber')}<b>${r.round}라운드 종료</b></div></div><div class="tb-right">${toggles()}</div></header>
+    <header class="topbar2"><div class="tb-left"><div class="brand">허리펴라</div><i class="vsep"></i><div class="stack">${lbl('MATCH RESULT', 'amber')}<b>${r.round}라운드 종료</b></div></div><div class="tb-right">${toggles()}${hostBtn()}</div></header>
     <div class="win">
       ${r.draw
         ? `<div class="stack center">${lbl('DRAW', 'red')}<h1>전원 탈선린, 무승부!</h1></div>`
@@ -1026,6 +1166,8 @@ function renderModal() {
           <ul class="log full">${S.pub.log.slice().reverse().map(l => `<li class="k-${l.k}">${esc(l.t)}</li>`).join('')}</ul>
         </details>
       </div></div></div>`;
+  } else if (S.modal === 'host') {
+    html = hostModalHTML();
   } else if (S.modal === 'deck') {
     const priv = myPriv();
     const deck = priv?.deck || [];
@@ -1105,6 +1247,7 @@ function onTick() {
     render();
   }
   pruneLobby();
+  if (S.vote) { voteDuty(); renderVote(); }
   updateTimers();
 }
 

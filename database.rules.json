@@ -45,6 +45,19 @@
           }
         }
       },
+      "vote": {
+        ".read": "auth != null",
+        ".write": "auth != null && (root.child('hp/meta/hostId').val() === auth.uid || (!newData.exists() && data.child('by').val() === auth.uid) || ((!data.exists() || now - data.child('at').val() > 30000) && newData.child('by').val() === auth.uid && root.child('hp/lobby/' + auth.uid + '/conn').exists()))",
+        "by": { ".validate": "newData.isString()" },
+        "at": { ".validate": "newData.isNumber() && newData.val() <= now + 10000" },
+        "v": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid && data.parent().parent().child('by').exists() && root.child('hp/lobby/' + auth.uid + '/conn').exists()",
+            ".validate": "newData.isBoolean()"
+          }
+        },
+        "$other": { ".validate": false }
+      },
       "hs": {
         ".read": "auth != null && root.child('hp/meta/hostId').val() === auth.uid",
         ".write": "auth != null && root.child('hp/meta/hostId').val() === auth.uid"
