@@ -1,0 +1,146 @@
+[
+  {
+    "card": "p01",
+    "name": "펀치만준",
+    "number": 1,
+    "motion": "punch",
+    "sheet": "img/characters/sprites/cast-01-sheet-v1.webp",
+    "cellAspect": 1,
+    "image": null
+  },
+  {
+    "card": "p02",
+    "name": "따봉훈",
+    "number": 2,
+    "motion": "hop",
+    "sheet": "img/characters/sprites/cast-02-sheet-v1.webp",
+    "cellAspect": 1,
+    "image": null
+  },
+  {
+    "card": "p03",
+    "name": "레이저훈",
+    "number": 3,
+    "motion": "cast",
+    "sheet": "img/characters/sprites/cast-03-sheet-v1.webp",
+    "cellAspect": 1,
+    "image": null
+  },
+  {
+    "card": "p04",
+    "name": "하키훈",
+    "number": 4,
+    "motion": "hop",
+    "sheet": "img/characters/sprites/cast-04-sheet-v1.webp",
+    "cellAspect": 1,
+    "image": null
+  },
+  {
+    "card": "p06",
+    "name": "지각훈",
+    "number": 5,
+    "motion": "dash",
+    "sheet": "img/characters/sprites/cast-05-sheet-v1.webp",
+    "cellAspect": 1,
+    "image": null
+  },
+  {
+    "card": "p09",
+    "name": "불꽃훈",
+    "number": 6,
+    "motion": "cast",
+    "sheet": "img/characters/sprites/cast-06-sheet-v1.webp",
+    "cellAspect": 1,
+    "image": null
+  },
+  {
+    "card": "p11",
+    "name": "알파훈",
+    "number": 7,
+    "motion": "punch",
+    "sheet": "img/characters/sprites/cast-07-sheet-v1.webp",
+    "cellAspect": 1,
+    "image": null
+  },
+  {
+    "card": "p13",
+    "name": "개구리",
+    "number": 8,
+    "motion": "hop",
+    "sheet": "img/characters/sprites/cast-08-sheet-v1.webp",
+    "cellAspect": 1,
+    "image": null
+  },
+  {
+    "card": "p65",
+    "name": "Mr.윤",
+    "number": 9,
+    "motion": "cast",
+    "sheet": "img/characters/sprites/cast-09-sheet-v1.webp",
+    "cellAspect": 1,
+    "image": "img/characters/cast-09-p65-clean-v2.png"
+  },
+  {
+    "card": "p74",
+    "name": "부따만준",
+    "number": 10,
+    "motion": "cast",
+    "sheet": "img/characters/sprites/cast-10-sheet-v1.webp",
+    "cellAspect": 1,
+    "image": "img/characters/cast-10-p74-clean-v2.png"
+  },
+  {
+    "card": "p53",
+    "name": "이강불",
+    "number": 11,
+    "motion": "punch",
+    "sheet": "img/characters/sprites/cast-11-sheet-v1.webp",
+    "cellAspect": 1,
+    "image": "img/characters/cast-11-p53-clean-v2.png"
+  },
+  {
+    "card": "p64",
+    "name": "시원주성",
+    "number": 12,
+    "motion": "cast",
+    "sheet": "img/characters/sprites/cast-12-sheet-v1.webp",
+    "cellAspect": 1,
+    "image": "img/characters/cast-12-p64-clean-v2.png"
+  },
+  {
+    "card": "p67",
+    "name": "SSR 이건",
+    "number": 13,
+    "motion": "hop",
+    "sheet": "img/characters/sprites/cast-13-sheet-v1.webp",
+    "cellAspect": 1,
+    "image": "img/characters/cast-13-p67-clean-v2.png"
+  },
+  {
+    "card": "p80",
+    "name": "휴가주성",
+    "number": 14,
+    "motion": "dash",
+    "sheet": "img/characters/sprites/cast-14-sheet-v1.webp",
+    "cellAspect": 1,
+    "image": "img/characters/cast-14-p80-clean-v2.png"
+  },
+  {
+    "card": "p88",
+    "name": "낼름채호",
+    "number": 15,
+    "motion": "punch",
+    "sheet": "img/characters/sprites/cast-15-sheet-v1.webp",
+    "cellAspect": 1,
+    "image": "img/characters/cast-15-p88-clean-v2.png"
+  },
+  {
+    "card": "p85",
+    "name": "퀵성태",
+    "number": 16,
+    "motion": "cast",
+    "sheet": "img/characters/sprites/cast-16-sheet-v2.webp",
+    "cellAspect": 1,
+    "image": "img/characters/cast-16-p85-clean-v2.png"
+  }
+]

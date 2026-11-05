@@ -95,7 +95,18 @@ body.aiming .pbox.locked::after { content: "🎯"; position: absolute; right: 6p
 .f-hp span { position: relative; display: block; text-align: center; font-size: 10px; font-weight: 900; line-height: 14px; text-shadow: 0 1px 2px #000; }
 .f-badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; min-height: 14px; }
 .f-badges .bd { font-size: 9px; padding: 0 4px; }
-.f-body { width: 100%; animation: bob 1.4s ease-in-out infinite; transform-origin: 50% 100%; transition: transform .12s, filter .12s; }
+.f-body { width: 100%; transform-origin: 50% 100%; transition: filter .12s; }
+.f-motion { width: 100%; }
+.sprite-player { position: relative; display: block; width: 100%; aspect-ratio: var(--sprite-aspect, 1); overflow: hidden; }
+.sprite-frames { position: absolute; inset: 0; display: block; background-image: var(--sprite-sheet); background-repeat: no-repeat; background-size: 400% 600%; background-position: 0% 0%; animation: sprite-idle 1.6s steps(1, end) infinite; animation-delay: var(--idle-phase, 0s); }
+.fighter[data-motion] .sprite-frames { animation: none; }
+@keyframes sprite-idle {
+  0%, 100% { background-position: 0% 0%; }
+  25% { background-position: 33.333333% 0%; }
+  50% { background-position: 66.666667% 0%; }
+  75% { background-position: 100% 0%; }
+}
+.unit-char, .win-char { animation: none; }
 .fighter.r .f-flip { transform: scaleX(-1); }
 .fighter.cur::before { content: ""; position: absolute; left: 8%; right: 8%; bottom: -2px; height: 16px; border-radius: 50%; background: radial-gradient(ellipse, rgba(255,210,63,.75), transparent 70%); animation: pulse-glow 1.2s ease-in-out infinite; }
 .fighter.cur .f-name { color: var(--accent); }
@@ -113,19 +124,11 @@ body.aiming .fighter.locked { transform: scale(1.08); }
 body.aiming .fighter.locked .f-body { filter: drop-shadow(0 0 10px #ff3b5c) drop-shadow(0 0 22px rgba(255,59,92,.7)) brightness(1.1); }
 body.aiming .fighter.locked::after { border: 3px solid #ff3b5c; background: rgba(255,59,92,.12); }
 
-/* 포즈 */
-.fighter.atk .arm-f { transform: rotate(-80deg) translateY(-6px); }
-.fighter.atk .arm-b { transform: rotate(-30deg); }
-.fighter.atk .f-body { animation: none; transform: rotate(6deg); }
-.fighter.hit .f-body { animation: none; filter: brightness(2.6) saturate(.3); transform: rotate(-8deg) scale(.96); }
-.fighter.hit .eyes { display: none; }
-.fighter.hit .eyes-hit { display: inline; }
-.fighter.guard .arm-f, .fighter.guard .arm-b { transform: rotate(-150deg); }
-/* 쓰러짐: 제자리에서 발 쪽을 축으로 눕는다 (필드 밖으로 넘치지 않게 작게) */
-.fighter.down .f-body { animation: none; transform-origin: 50% 94%; transform: rotate(-84deg) scale(.72) translateY(10%); filter: grayscale(1) brightness(.7); transition: transform .5s cubic-bezier(.3,1.6,.5,1), filter .5s; }
-.fighter.r.down .f-body { transform: rotate(84deg) scale(.72) translateY(10%); }
-.fighter.down .eyes { display: none; }
-.fighter.down .eyes-ko { display: inline; }
+/* 이미지에는 효과를 굽지 않고, 실제 상태에 맞춰 포즈와 색만 바꾼다. */
+.fighter[data-motion="hit"] .f-body { filter: brightness(1.65) saturate(.65); }
+.fighter[data-motion="guard"] .f-body { filter: drop-shadow(0 0 3px rgba(124,196,255,.55)); }
+.fighter.down .f-body { filter: grayscale(1) brightness(.7); }
+.fighter.down .sprite-frames { animation: none; background-position: 100% 100%; }
 .fighter.dead .f-top { opacity: .5; }
 
 /* 필드 위에 겹치는 것 */
@@ -194,7 +197,8 @@ body.aiming .field-hint { display: none; }
     .dock-side { gap: 4px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .f-body, .char-preview, .win-char, .arena-bg::after { animation: none !important; }
+  .f-body, .f-motion, .sprite-frames, .char-preview, .win-char, .arena-bg::after { animation: none !important; }
+  .fighter.down .f-motion { opacity: .55; }
 }
 
 
@@ -343,3 +347,15 @@ body.aiming .fighter.locked .f-body { filter: drop-shadow(0 0 10px var(--red)); 
   .gm { height: 14px; font-size: 8px; padding: 0 3px; }
   .gm b { font-size: 9px; }
 }
+
+/* 카드 등장인물 선택과 생성 이미지 아틀라스 */
+.char.card-character, .char-head.card-character { overflow: hidden; }
+.cast-note { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+.cast-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; }
+.cast-option { min-width: 0; padding: 6px 3px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.035); color: var(--text); cursor: pointer; }
+.cast-option:hover { background: rgba(255,255,255,.09); }
+.cast-option.selected { border-color: var(--accent); background: rgba(255,210,63,.12); box-shadow: 0 0 0 1px var(--accent); }
+.cast-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.cast-option b, .cast-option small { display: block; font-size: 10px; white-space: nowrap; }
+.cast-option small { color: var(--muted); font-size: 9px; margin-top: 3px; }
+@media (max-width: 480px) { .cast-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

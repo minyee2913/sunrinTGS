@@ -5,6 +5,7 @@ import { cardHTML, hiddenCardHTML } from './view.js';
 import { replayMs } from './engine.js';
 import * as V from './vfx.js';
 import { sfx } from './sfx.js';
+import { createMotion } from './motion.js';
 
 const STEP = { dmg: 380, ko: 1300, trigger: 420, block: 280, heal: 320, react: 320, nullify: 260, strip: 260, unreact: 280, debuff: 280, gimmick: 300 };
 const CARD_MS = 800; // 낸 카드를 크게 보여주는 시간
@@ -16,6 +17,8 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
   let stopped = false;
   const natural = rep.plays.reduce((a, g) => a + groupMs(g), 0);
   const speed = Math.min(1 / 1.5, Math.max(.12, (replayMs(rep.plays) - 150) / natural));
+  const motion = createMotion({ speed });
+  const reduced = () => globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
   const wait = ms => (stopped ? Promise.resolve() : new Promise(r => setTimeout(r, ms * speed)));
 
   const F = u => field.querySelector(`.fighter[data-u="${u}"]`);
@@ -32,6 +35,8 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
     el.querySelector('.f-hp').classList.toggle('low', h / max <= .3);
   };
   const moveTo = (el, x, y, ms, easing = 'ease-out') => {
+    if (stopped) return Promise.resolve();
+    if (reduced()) { x = 0; y = 0; }
     const from = el._off || { x: 0, y: 0 };
     el._off = { x, y };
     return el.animate([{ transform: `translate(${from.x}px, ${from.y}px)` }, { transform: `translate(${x}px, ${y}px)` }],
@@ -40,11 +45,15 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
   const lunge = async (a, b) => {
     const ca = center(a), cb = center(b);
     const dir = Math.sign(cb.x - ca.x) || 1;
-    a.classList.add('atk');
+    motion.play(a, 'attack');
     a.style.zIndex = 5;
+    if (a.dataset.attack === 'cast') {
+      await wait(210); // 공격 시트의 세 번째(명중) 프레임
+      return;
+    }
     sfx.dash();
     V.puff(ca.x, ca.r.bottom - 10);
-    await moveTo(a, cb.x - ca.x - dir * cb.r.width * .8, (cb.r.bottom - ca.r.bottom) * .5, 170, 'cubic-bezier(.5,0,.9,.4)');
+    await moveTo(a, cb.x - ca.x - dir * cb.r.width * .8, (cb.r.bottom - ca.r.bottom) * .5, 210, 'cubic-bezier(.5,0,.9,.4)');
   };
   const retreat = async a => {
     if (!a) return;
@@ -53,14 +62,15 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
     a.style.zIndex = '';
   };
   const knock = (el, dir, power) => {
+    motion.play(el, 'hit', { power, direction: dir * (el.classList.contains('r') ? -1 : 1) });
+    if (reduced()) return;
     const o = el._off || { x: 0, y: 0 };
     el.animate([{ transform: `translate(${o.x}px,${o.y}px)` }, { transform: `translate(${o.x + dir * (8 + power * 22)}px,${o.y}px)` }, { transform: `translate(${o.x}px,${o.y}px)` }],
       { duration: 260 * speed + 60, easing: 'ease-out' });
-    el.classList.add('hit');
-    setTimeout(() => el.classList.remove('hit'), 280);
   };
 
   const hitFx = (f, srcEl) => {
+    if (stopped) return;
     const el = F(f.u);
     if (!el) return;
     const { x, y } = center(el);
@@ -73,6 +83,7 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
       sfx.hit(f.v);
       if (f.v >= 10) V.flash('rgba(255,255,255,.35)', 160);
     } else {
+      motion.play(el, 'guard');
       V.ring(x, y, { color: '#7cc4ff', r1: 70, w: 8 });
       V.burst(x, y, { colors: ['#7cc4ff', '#fff'], n: 12, speed: 6 });
       V.text(x, y - 40, '막음!', 'f-block');
@@ -120,6 +131,8 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
     const A = actor && F(actor);
     showBanner(g, A);
     await wait(CARD_MS + 60);
+    if (stopped) return;
+    if (A && g.k === 'card' && g.t !== 'atk') motion.play(A, g.t === 'def' ? 'guard' : 'cast');
     let near = null;
     for (const f of g.fx) {
       if (stopped) return;
@@ -130,7 +143,8 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
         case 'dmg':
           if (A && f.s === actor && f.u !== actor) {
             if (near !== f.u) { await lunge(A, el); near = f.u; }
-            else { A.classList.remove('atk'); void A.offsetWidth; A.classList.add('atk'); }
+            else { motion.play(A, 'attack'); await wait(210); }
+            if (stopped) return;
             if (f.v >= 10) await wait(70); // 히트스톱
             hitFx(f, A);
             await wait(STEP.dmg);
@@ -139,7 +153,7 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
             await retreat(A);
             near = null;
             const C = F(f.s);
-            if (C) { await lunge(C, A); hitFx(f, C); await wait(STEP.dmg); await retreat(C); }
+            if (C) { await lunge(C, A); if (stopped) return; hitFx(f, C); await wait(STEP.dmg); await retreat(C); }
             else { hitFx(f, null); await wait(STEP.dmg); }
           } else {
             if (f.u === actor) { await retreat(A); near = null; }
@@ -149,6 +163,7 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
           }
           break;
         case 'ko':
+          motion.play(el, 'down');
           el.classList.add('down');
           V.eliminated(nameOf(f.u), x, y);
           V.shake(shakeEl, 26, 600);
@@ -156,14 +171,14 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
           await wait(STEP.ko);
           break;
         case 'block':
-          el.classList.add('guard');
-          setTimeout(() => el.classList.remove('guard'), 400);
+          motion.play(el, 'guard');
           V.ring(x, y, { color: '#4dabf7', r0: 30, r1: 80, w: 10, life: 500 });
           V.text(x, y - 50, `🛡+${f.v}`, 'f-block');
           sfx.shield();
           await wait(STEP.block);
           break;
         case 'heal':
+          motion.play(el, 'heal');
           V.sparkle(x, y);
           V.text(x, y - 50, `+${f.v}`, 'f-heal');
           if (f.h != null) setHp(f.u, f.h);
@@ -171,6 +186,7 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
           await wait(STEP.heal);
           break;
         case 'react':
+          motion.play(el, 'cast');
           V.ring(x, y + 40, { color: '#b197fc', r0: 10, r1: 70, w: 5, life: 600 });
           V.sparkle(x, y, { colors: ['#b197fc', '#e0d2ff'] });
           V.text(x, y - 50, '❔ 반응 설치', 'f-react');
@@ -178,6 +194,7 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
           await wait(STEP.react);
           break;
         case 'trigger':
+          motion.play(el, 'cast');
           V.flash('rgba(177,151,252,.35)', 200);
           V.ring(x, y, { color: '#b197fc', r1: 120, w: 10 });
           V.text(x, y - 70, `⚡ ${f.v}!`, 'f-trigger');
@@ -185,6 +202,7 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
           await wait(STEP.trigger);
           break;
         case 'nullify':
+          motion.play(el, 'guard');
           V.ring(x, y, { color: '#e0d2ff', r1: 90, w: 8 });
           V.text(x, y - 40, '무효!', 'f-react');
           sfx.blocked();
@@ -198,12 +216,14 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
           await wait(STEP.strip);
           break;
         case 'debuff':
+          motion.play(el, 'hit', { power: .1 });
           V.puff(x, y - 20, { color: 'rgba(170,120,255,.45)' });
           V.text(x, y - 50, f.v, 'f-debuff');
           sfx.debuff();
           await wait(STEP.debuff);
           break;
         case 'gimmick': {
+          motion.play(el, f.kind === 'debuff' ? 'hit' : 'cast', { power: .1 });
           const col = { buff: ['#7fd6ff', '#e6f6ff'], debuff: ['#ff7a7a', '#ffd0d0'], mixed: ['#ffd23f', '#fff3c2'] }[f.kind] || ['#fff'];
           V.ring(x, y + 30, { color: col[0], r0: 12, r1: 60, w: 4, life: 500 });
           V.sparkle(x, y, { colors: col, n: 10 });
@@ -222,6 +242,7 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
   const close = () => {
     if (stopped) return;
     stopped = true;
+    motion.stop();
     banner.remove();
     title.remove();
     field.classList.remove('replaying');

@@ -1,0 +1,322 @@
+[
+  {
+    "number": 1,
+    "sheet": "img/characters/sprites/cast-01-sheet-v1.webp",
+    "source": "img/characters/sprites/cast-01-sheet-v1.png",
+    "width": 1024,
+    "height": 1536,
+    "columns": 4,
+    "rows": 6,
+    "frameCount": 24,
+    "cellAspect": 1.0,
+    "states": {
+      "idle": 0,
+      "attack": 1,
+      "hit": 2,
+      "guard": 3,
+      "heal": 4,
+      "down": 5,
+      "cast": 1
+    }
+  },
+  {
+    "number": 2,
+    "sheet": "img/characters/sprites/cast-02-sheet-v1.webp",
+    "source": "img/characters/sprites/cast-02-sheet-v1.png",
+    "width": 1024,
+    "height": 1536,
+    "columns": 4,
+    "rows": 6,
+    "frameCount": 24,
+    "cellAspect": 1.0,
+    "states": {
+      "idle": 0,
+      "attack": 1,
+      "hit": 2,
+      "guard": 3,
+      "heal": 4,
+      "down": 5,
+      "cast": 1
+    }
+  },
+  {
+    "number": 3,
+    "sheet": "img/characters/sprites/cast-03-sheet-v1.webp",
+    "source": "img/characters/sprites/cast-03-sheet-v1.png",
+    "width": 1024,
+    "height": 1536,
+    "columns": 4,
+    "rows": 6,
+    "frameCount": 24,
+    "cellAspect": 1.0,
+    "states": {
+      "idle": 0,
+      "attack": 1,
+      "hit": 2,
+      "guard": 3,
+      "heal": 4,
+      "down": 5,
+      "cast": 1
+    }
+  },
+  {
+    "number": 4,
+    "sheet": "img/characters/sprites/cast-04-sheet-v1.webp",
+    "source": "img/characters/sprites/cast-04-sheet-v1.png",
+    "width": 1024,
+    "height": 1536,
+    "columns": 4,
+    "rows": 6,
+    "frameCount": 24,
+    "cellAspect": 1.0,
+    "states": {
+      "idle": 0,
+      "attack": 1,
+      "hit": 2,
+      "guard": 3,
+      "heal": 4,
+      "down": 5,
+      "cast": 1
+    }
+  },
+  {
+    "number": 5,
+    "sheet": "img/characters/sprites/cast-05-sheet-v1.webp",
+    "source": "img/characters/sprites/cast-05-sheet-v1.png",
+    "width": 1024,
+    "height": 1536,
+    "columns": 4,
+    "rows": 6,
+    "frameCount": 24,
+    "cellAspect": 1.0,
+    "states": {
+      "idle": 0,
+      "attack": 1,
+      "hit": 2,
+      "guard": 3,
+      "heal": 4,
+      "down": 5,
+      "cast": 1
+    }
+  },
+  {
+    "number": 6,
+    "sheet": "img/characters/sprites/cast-06-sheet-v1.webp",
+    "source": "img/characters/sprites/cast-06-sheet-v1.png",
+    "width": 1024,
+    "height": 1536,
+    "columns": 4,
+    "rows": 6,
+    "frameCount": 24,
+    "cellAspect": 1.0,
+    "states": {
+      "idle": 0,
+      "attack": 1,
+      "hit": 2,
+      "guard": 3,
+      "heal": 4,
+      "down": 5,
+      "cast": 1
+    }
+  },
+  {
+    "number": 7,
+    "sheet": "img/characters/sprites/cast-07-sheet-v1.webp",
+    "source": "img/characters/sprites/cast-07-sheet-v1.png",
+    "width": 1024,
+    "height": 1536,
+    "columns": 4,
+    "rows": 6,
+    "frameCount": 24,
+    "cellAspect": 1.0,
+    "states": {
+      "idle": 0,
+      "attack": 1,
+      "hit": 2,
+      "guard": 3,
+      "heal": 4,
+      "down": 5,
+      "cast": 1
+    }
+  },
+  {
+    "number": 8,
+    "sheet": "img/characters/sprites/cast-08-sheet-v1.webp",
+    "source": "img/characters/sprites/cast-08-sheet-v1.png",
+    "width": 1024,
+    "height": 1536,
+    "columns": 4,
+    "rows": 6,
+    "frameCount": 24,
+    "cellAspect": 1.0,
+    "states": {
+      "idle": 0,
+      "attack": 1,
+      "hit": 2,
+      "guard": 3,
+      "heal": 4,
+      "down": 5,
+      "cast": 1
+    }
+  },
+  {
+    "number": 9,
+    "sheet": "img/characters/sprites/cast-09-sheet-v1.webp",
+    "source": "img/characters/sprites/cast-09-sheet-v1.png",
+    "width": 1024,
+    "height": 1536,
+    "columns": 4,
+    "rows": 6,
+    "frameCount": 24,
+    "cellAspect": 1.0,
+    "states": {
+      "idle": 0,
+      "attack": 1,
+      "hit": 2,
+      "guard": 3,
+      "heal": 4,
+      "down": 5,
+      "cast": 1
+    }
+  },
+  {
+    "number": 10,
+    "sheet": "img/characters/sprites/cast-10-sheet-v1.webp",
+    "source": "img/characters/sprites/cast-10-sheet-v1.png",
+    "width": 1024,
+    "height": 1536,
+    "columns": 4,
+    "rows": 6,
+    "frameCount": 24,
+    "cellAspect": 1.0,
+    "states": {
+      "idle": 0,
+      "attack": 1,
+      "hit": 2,
+      "guard": 3,
+      "heal": 4,
+      "down": 5,
+      "cast": 1
+    }
+  },
+  {
+    "number": 11,
+    "sheet": "img/characters/sprites/cast-11-sheet-v1.webp",
+    "source": "img/characters/sprites/cast-11-sheet-v1.png",
+    "width": 1024,
+    "height": 1536,
+    "columns": 4,
+    "rows": 6,
+    "frameCount": 24,
+    "cellAspect": 1.0,
+    "states": {
+      "idle": 0,
+      "attack": 1,
+      "hit": 2,
+      "guard": 3,
+      "heal": 4,
+      "down": 5,
+      "cast": 1
+    }
+  },
+  {
+    "number": 12,
+    "sheet": "img/characters/sprites/cast-12-sheet-v1.webp",
+    "source": "img/characters/sprites/cast-12-sheet-v1.png",
+    "width": 1024,
+    "height": 1536,
+    "columns": 4,
+    "rows": 6,
+    "frameCount": 24,
+    "cellAspect": 1.0,
+    "states": {
+      "idle": 0,
+      "attack": 1,
+      "hit": 2,
+      "guard": 3,
+      "heal": 4,
+      "down": 5,
+      "cast": 1
+    }
+  },
+  {
+    "number": 13,
+    "sheet": "img/characters/sprites/cast-13-sheet-v1.webp",
+    "source": "img/characters/sprites/cast-13-sheet-v1.png",
+    "width": 1024,
+    "height": 1536,
+    "columns": 4,
+    "rows": 6,
+    "frameCount": 24,
+    "cellAspect": 1.0,
+    "states": {
+      "idle": 0,
+      "attack": 1,
+      "hit": 2,
+      "guard": 3,
+      "heal": 4,
+      "down": 5,
+      "cast": 1
+    }
+  },
+  {
+    "number": 14,
+    "sheet": "img/characters/sprites/cast-14-sheet-v1.webp",
+    "source": "img/characters/sprites/cast-14-sheet-v1.png",
+    "width": 1024,
+    "height": 1536,
+    "columns": 4,
+    "rows": 6,
+    "frameCount": 24,
+    "cellAspect": 1.0,
+    "states": {
+      "idle": 0,
+      "attack": 1,
+      "hit": 2,
+      "guard": 3,
+      "heal": 4,
+      "down": 5,
+      "cast": 1
+    }
+  },
+  {
+    "number": 15,
+    "sheet": "img/characters/sprites/cast-15-sheet-v1.webp",
+    "source": "img/characters/sprites/cast-15-sheet-v1.png",
+    "width": 1024,
+    "height": 1536,
+    "columns": 4,
+    "rows": 6,
+    "frameCount": 24,
+    "cellAspect": 1.0,
+    "states": {
+      "idle": 0,
+      "attack": 1,
+      "hit": 2,
+      "guard": 3,
+      "heal": 4,
+      "down": 5,
+      "cast": 1
+    }
+  },
+  {
+    "number": 16,
+    "sheet": "img/characters/sprites/cast-16-sheet-v2.webp",
+    "source": "img/characters/sprites/cast-16-sheet-v2.png",
+    "width": 1024,
+    "height": 1536,
+    "columns": 4,
+    "rows": 6,
+    "frameCount": 24,
+    "cellAspect": 1,
+    "states": {
+      "idle": 0,
+      "attack": 1,
+      "hit": 2,
+      "guard": 3,
+      "heal": 4,
+      "down": 5,
+      "cast": 1
+    }
+  }
+]

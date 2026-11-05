@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>캐릭터 모션 미리보기</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/fx.css">
+<style>
+  body { height:auto; overflow:auto; padding:24px; }
+  h1 { font-size:24px; margin:0 0 8px; }
+  p { color:#aaa; margin:8px 0 20px; }
+  nav { display:flex; flex-wrap:wrap; gap:8px; position:sticky; top:0; z-index:10; background:#11151c; padding:12px 0; }
+  button { padding:9px 14px; border:1px solid #495466; background:#242b37; color:white; cursor:pointer; }
+  button[aria-pressed="true"] { border-color:#ffd23f; color:#ffd23f; }
+  main { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:20px; }
+  article { min-width:0; background:#191c28; padding:14px; border:1px solid #35394a; overflow:hidden; }
+  .preview-name { min-height:32px; display:block; }
+  .fighter { width:min(100%,230px); margin:0 auto; }
+  .f-body { padding:10px 0 24px; }
+  @media(max-width:650px) { main { grid-template-columns:repeat(2,minmax(0,1fr)); } body{padding:12px;} }
+</style>
+<h1>캐릭터 스프라이트 모션</h1>
+<p>16명 · 캐릭터당 24프레임 · 대기 / 공격 / 피격 / 방어 / 회복 / 쓰러짐. 각 칸의 다른 그림을 순서대로 재생합니다.</p>
+<nav id="controls"></nav><main id="cast"></main>
+<script type="module">
+  import { CHARACTERS, charSVG } from './js/chars.js';
+  import { createMotion } from './js/motion.js';
+  let slow = false, right = false;
+  let motion = createMotion();
+  const states = { idle:'대기', attack:'공격', hit:'피격', guard:'방어', heal:'회복', cast:'시전', down:'쓰러짐' };
+  document.querySelector('#cast').innerHTML = CHARACTERS.map((c,i) => `<article><b class="preview-name">${c.number}. ${c.name}</b><div class="fighter" data-attack="${c.motion}" style="--idle-phase:-${i*.17}s"><div class="f-body"><div class="f-flip"><div class="f-motion">${charSVG({c:i,hair:0,face:0,acc:0})}</div></div></div></div><a href="${c.sheet}" target="_blank">24프레임 시트 보기</a></article>`).join('');
+  const controls = document.querySelector('#controls');
+  controls.innerHTML = Object.entries(states).map(([k,v]) => `<button data-state="${k}">${v}</button>`).join('') + '<button id="direction" aria-pressed="false">방향 전환</button><button id="slow" aria-pressed="false">느리게</button>';
+  controls.addEventListener('click', e => {
+    const button = e.target.closest('button');
+    if (!button) return;
+    if (button.id === 'direction') {
+      right = !right;
+      document.querySelectorAll('.fighter').forEach(el => el.classList.toggle('r',right));
+      button.setAttribute('aria-pressed',right);
+      return;
+    }
+    if (button.id === 'slow') { slow = !slow; button.setAttribute('aria-pressed',slow); }
+    motion.stop();
+    motion = createMotion({speed:slow ? 2 : 1});
+    document.querySelectorAll('.fighter').forEach(el => {
+      el.classList.remove('down');
+      const state = button.dataset.state;
+      if (state && state !== 'idle') {
+        motion.play(el,state);
+        if (state === 'down') el.classList.add('down');
+      }
+    });
+  });
+</script>
+</html>

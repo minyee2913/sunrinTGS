@@ -6,7 +6,7 @@
 
 export const GIMMICKS = {
   slow: { name: '둔화', kind: 'debuff', max: 4, short: '둔',
-    desc: '다음 턴에 상대의 드로우 카드 1장 감소' },
+    desc: '다음 턴에 자신의 드로우 카드 1장 감소' },
   blind: { name: '실명', kind: 'debuff', short: '실',
     desc: '공격 대상을 지정할 수 없고 무작위 대상에게 공격함' },
   clone: { name: '분신', kind: 'buff', max: 3, short: '분',

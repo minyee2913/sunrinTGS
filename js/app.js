@@ -5,8 +5,9 @@ import { Host } from './host.js';
 import { esc, cardHTML, hiddenCardHTML, avatarHTML, galleryHTML, gimmickChipsHTML, gimmickTipHTML } from './view.js';
 import { GIMMICKS, linkGimmicks } from './gimmicks.js';
 import { cardText, cardName, cardCost, isEdited, editCount, setCardField, resetCard, resetAll, exportJSON, exportCSV } from './editor.js';
-import { CHAR_OPTS, charSVG, defaultChar, validChar, cycleChar } from './chars.js';
+import { CHARACTERS, charSVG, defaultChar, validChar, cycleChar } from './chars.js';
 import { playReplay } from './replay.js';
+import { liveMotion } from './motion.js';
 import * as V from './vfx.js';
 import { sfx, music, unlockAudio, isMuted, setMuted } from './sfx.js';
 
@@ -456,12 +457,16 @@ function onClick(e) {
       toast('한 번 더 누르면 게임이 종료돼요');
       setTimeout(() => render(), 5100);
       return render();
+    case 'charSelect':
+      S.myChar = { ...S.myChar, c: +el.dataset.index };
+      saveChar();
+      return render();
     case 'char':
       S.myChar = cycleChar(S.myChar, el.dataset.k, +el.dataset.d);
       saveChar();
       return render();
     case 'charRandom':
-      S.myChar = { c: rnd(10), hair: rnd(CHAR_OPTS.hair.names.length), face: rnd(CHAR_OPTS.face.names.length), acc: rnd(CHAR_OPTS.acc.names.length) };
+      S.myChar = { c: rnd(CHARACTERS.length), hair: 0, face: 0, acc: 0 };
       saveChar();
       return render();
     case 'editor': S.modal = 'editor'; return render();
@@ -545,6 +550,7 @@ function render(force = false) {
   }
   const html = { entry: entryHTML, lobby: lobbyHTML, battle: battleHTML, result: resultHTML, wait: waitHTML }[scr]() + overlayHTML();
   if (force || html !== lastHTML) {
+    liveMotion.stop();
     const nick = $('#nick');
     const keep = nick && { v: nick.value, f: document.activeElement === nick };
     app.innerHTML = html;
@@ -571,7 +577,6 @@ function modeBanner() {
 
 const lbl = (t, cls = '') => `<span class="lbl ${cls}">${t}</span>`;
 const pad2 = n => String(n).padStart(2, '0');
-const HUES = [0, 25, 45, 120, 165, 200, 225, 265, 300, 330];
 
 const toggles = () => `<div class="toggles">
   <button class="tg ${isMuted() ? 'off' : ''}" data-act="mute" title="효과음">SFX</button>
@@ -627,25 +632,12 @@ function entryHTML() {
 }
 
 function customizeHTML() {
-  const ch = S.myChar;
-  const row = (k, val, swatch = '') => {
-    const n = CHAR_OPTS[k].n ?? CHAR_OPTS[k].names.length;
-    return `<div class="crow2">
-      <span class="clabel">${CHAR_OPTS[k].label}</span>
-      <div class="crow-ctl">
-        <button class="sq-btn" data-act="char" data-k="${k}" data-d="-1" aria-label="이전">◀</button>
-        <div class="cval">${swatch}<b>${val}</b></div>
-        <button class="sq-btn" data-act="char" data-k="${k}" data-d="1" aria-label="다음">▶</button>
-      </div>
-      <div class="dots">${Array.from({ length: n }, (_, i) => `<i class="${i === ch[k] ? 'on' : ''}"></i>`).join('')}</div>
-    </div>`;
-  };
   return `<section class="col custom">
-    <div class="col-head">${lbl('CUSTOMIZE')}<button class="link-btn" data-act="charRandom">무작위</button></div>
-    ${row('c', `${['빨강', '주황', '노랑', '초록', '민트', '하늘', '파랑', '보라', '분홍', '자주'][ch.c]}`, `<i class="swatch" style="--h:${HUES[ch.c]}"></i>`)}
-    ${row('hair', CHAR_OPTS.hair.names[ch.hair])}
-    ${row('face', CHAR_OPTS.face.names[ch.face])}
-    ${row('acc', CHAR_OPTS.acc.names[ch.acc])}
+    <div class="col-head">${lbl('CHARACTER')}<button class="link-btn" data-act="charRandom">무작위</button></div>
+    <p class="cast-note">카드 속 등장인물 ${CHARACTERS.length}명</p>
+    <div class="cast-grid">${CHARACTERS.map((ch, i) => `<button type="button" class="cast-option ${S.myChar.c === i ? 'selected' : ''}" data-act="charSelect" data-index="${i}" aria-label="${ch.name} 선택" aria-pressed="${S.myChar.c === i}">
+      ${charSVG({ c: i, hair: 0, face: 0, acc: 0 })}<b>${ch.name}</b><small>카드 ${ch.card.slice(1)}</small>
+    </button>`).join('')}</div>
   </section>`;
 }
 
@@ -734,7 +726,8 @@ function fighterHTML(u, right, plan) {
   const priv = myPriv();
   const st = (u === S.uid && priv?.st) || x.st || {};
   const hidden = u !== S.uid && x.stHidden;
-  return `<div class="${cls}" data-u="${u}" data-pid="${u}">
+  const character = CHARACTERS[charOf(u).c];
+  return `<div class="${cls}" data-u="${u}" data-pid="${u}" data-attack="${character.motion}" style="--idle-phase:-${character.number * .17}s">
     <div class="f-top">
       <div class="f-row">
         <span class="f-name">${esc(x.name)}${u === S.uid ? '<em>나</em>' : ''}${u === S.meta.hostId ? lbl('HOST', 'amber') : ''}</span>
@@ -751,7 +744,7 @@ function fighterHTML(u, right, plan) {
         ${gimmickChipsHTML(st, hidden)}
       </div>
     </div>
-    <div class="f-body"><div class="f-flip">${charSVG(charOf(u))}</div>${st.clone && !hidden ? `<div class="clones">${Array.from({ length: st.clone }, () => `<div class="clone">${charSVG(charOf(u))}</div>`).join('')}</div>` : ''}</div>
+    <div class="f-body"><div class="f-flip"><div class="f-motion">${charSVG(charOf(u))}</div></div>${st.clone && !hidden ? `<div class="clones">${Array.from({ length: st.clone }, () => `<div class="clone">${charSVG(charOf(u))}</div>`).join('')}</div>` : ''}</div>
     ${aimed ? `<div class="aimed mono">TGT${aimed > 1 ? `×${aimed}` : ''}</div>` : ''}
     ${p.cur === u && p.plan && u !== S.uid ? `<div class="f-think mono">QUEUE ${p.plan.n}</div>` : ''}
     ${!x.alive ? '<div class="f-out">탈선린</div>' : ''}
@@ -1071,18 +1064,19 @@ function spawnFx() {
         sfx.hit(f.v);
         shakePower = Math.max(shakePower, 3 + f.v * .6);
         if (f.u === S.uid) V.flash('rgba(255,40,70,.3)', 260);
-        box.classList.remove('hit');
-        void box.offsetWidth;
-        box.classList.add('hit');
-      } else { V.text(x, y, '막음!', 'f-block'); sfx.blocked(); }
+        liveMotion.play(box, 'hit', { power: Math.min(1, f.v / 14) });
+      } else { liveMotion.play(box, 'guard'); V.text(x, y, '막음!', 'f-block'); sfx.blocked(); }
     } else if (f.k === 'ko') {
+      liveMotion.play(box, 'down');
       V.eliminated(name(f.u));
       sfx.ko();
       shakePower = 20;
     } else {
       const t = { heal: `+${f.v}`, block: `🛡+${f.v}`, nullify: '무효!', react: '반응 설치', strip: '방어도 파괴!', unreact: '반응 무력화!', trigger: `${f.v}!`, debuff: f.v, gimmick: f.v }[f.k];
       if (t) V.text(x, y, t, `f-${f.k} ${f.kind ? `g-${f.kind}` : ''}`);
-      if (f.k === 'heal') V.sparkle(x, y);
+      if (f.k === 'heal') { liveMotion.play(box, 'heal'); V.sparkle(x, y); }
+      else if (f.k === 'block' || f.k === 'nullify') liveMotion.play(box, 'guard');
+      else if (f.k === 'react' || f.k === 'trigger' || f.k === 'gimmick') liveMotion.play(box, 'cast');
     }
   }
   if (shakePower) V.shake(app, Math.min(20, shakePower));
