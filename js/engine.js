@@ -161,6 +161,11 @@ export function addGimmick(G, t, id, n) {
   const after = Math.max(0, Math.min(g.max ?? Infinity, before + n));
   if (after === before) return;
   if (after) t.st[id] = after; else delete t.st[id];
+  // 남의 턴에 받은 중첩은 바로 다음 내 턴 시작 감소에서 빼 준다 (1중첩이 내 턴이 오자마자 사라지지 않게)
+  const fresh = (t.stNew ||= {});
+  if (after > before && G.cur !== t.uid) fresh[id] = (fresh[id] || 0) + after - before;
+  if (fresh[id] > after) fresh[id] = after;
+  if (!fresh[id]) delete fresh[id];
   if (id === 'rice' && after > before) t.clean = true;
   const hidden = t.st.hush && id !== 'hush';
   fx(G, t.uid, 'gimmick', hidden ? '기믹 ?' : `${g.name} ${after > before ? '+' : ''}${after - before}`, { g: hidden ? null : id, kind: g.kind });
@@ -231,10 +236,13 @@ function turnStartGimmicks(G, p) {
     fx(G, p.uid, 'gimmick', `${gname('slow')}: 드로우 -${n}`, { g: 'slow', kind: 'debuff' });
     log(G, `${p.name}의 ${gname('slow')}: 드로우 -${n}`);
   }
+  const fresh = p.stNew || {};
   for (const id of Object.keys(st)) {
+    if ((fresh[id] || 0) >= st[id]) continue; // 전부 지난 내 턴 뒤에 받은 중첩이면 이번에는 줄지 않는다
     st[id]--;
     if (st[id] <= 0) delete st[id];
   }
+  p.stNew = {};
 }
 
 export function endTurn(G, uid, now, reason = '') {
@@ -439,6 +447,7 @@ function makeCtx(G, p, card, target) {
     clearGimmicks: t => {
       if (!t?.alive || !Object.keys(t.st).length) return;
       t.st = {};
+      t.stNew = {};
       fx(G, t.uid, 'debuff', '기믹 모두 제거');
       log(G, `${t.name}의 기믹이 모두 사라졌다`);
     },

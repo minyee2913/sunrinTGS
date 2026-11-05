@@ -42,7 +42,7 @@ export const GIMMICKS = {
 
 export const CHANGE_CHANCE = 0.05;
 
-export const GIMMICK_RULE = '중첩으로 쌓이고, 턴 시작 시 1씩 감소';
+export const GIMMICK_RULE = '중첩으로 쌓이고, 턴 시작 시 1씩 감소 (남의 턴에 새로 받은 중첩은 바로 다음 내 턴 시작에는 줄지 않음)';
 
 // 이름이 긴 것부터 찾아야 '성능평가' 같은 이름이 잘리지 않는다
 const BY_NAME = Object.entries(GIMMICKS).sort((a, b) => b[1].name.length - a[1].name.length);
