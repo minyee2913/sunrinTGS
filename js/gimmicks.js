@@ -1,36 +1,37 @@
 // 기믹 (상태 효과). 엔진과 화면이 함께 쓴다.
-// 공통 규칙: 플레이어마다 중첩으로 쌓이고, 자기 턴이 시작될 때 효과를 낸 뒤 1씩 줄어든다.
-// max가 없으면 무한 중첩.
+// 공통 규칙(기획서): 슬더슬처럼 중첩으로 쌓이고, 턴 시작 시 모두 1씩 감소한다.
+// 최대치가 없으면 무한 중첩. 감소는 그 기믹을 가진 사람의 턴이 시작될 때, 턴 시작 효과를 낸 뒤에 한다.
+// desc는 기획서 문구 그대로 둔다.
 // kind: buff(이로운) / debuff(해로운) / mixed(운에 달림)
 
 export const GIMMICKS = {
   slow: { name: '둔화', kind: 'debuff', max: 4, short: '둔',
-    desc: '내 턴이 시작될 때 미리 뽑아 둔 손패에서 중첩 수만큼 카드를 무작위로 버린다.' },
+    desc: '다음 턴에 상대의 드로우 카드 1장 감소' },
   blind: { name: '실명', kind: 'debuff', short: '실',
-    desc: "대상을 지정할 수 없다. '상대 1명' 공격은 무작위 상대에게 날아간다." },
+    desc: '공격 대상을 지정할 수 없고 무작위 대상에게 공격함' },
   clone: { name: '분신', kind: 'buff', max: 3, short: '분',
-    desc: '작은 분신이 옆에 생긴다. 공격을 받으면 분신 1개가 대신 맞아 피해를 무효로 하고 사라진다.' },
+    desc: '자신의 작은 분신이 옆에 생긴다.' },
   str: { name: '치녀', kind: 'buff', short: '치',
-    desc: '내가 주는 공격 피해가 중첩 수만큼 증가한다.' },
+    desc: '가하는 데미지가 1 증가' },
   weak: { name: '성능평가', kind: 'debuff', short: '성',
-    desc: '내가 주는 공격 피해가 중첩 수만큼 감소한다 (최소 0).' },
+    desc: '가하는 데미지가 1 감소' },
   dex: { name: '줴줴이야', kind: 'buff', short: '줴',
-    desc: '내가 얻는 방어도가 중첩 수만큼 증가한다.' },
+    desc: '얻는 보호막 1 증가' },
   buta: { name: '부타', kind: 'buff', short: '부',
-    desc: '만준 상태인 대상에게 주는 공격 피해가 2배가 된다.' },
+    desc: '만준에게 넣는 데미지 2배' },
   manjun: { name: '만준', kind: 'buff', short: '만',
-    desc: '체력에 피해를 받으면 그 절반(내림)만큼 회복한다.' },
+    desc: '맞은 데미지의 절반 만큼 회복' },
   ai: { name: 'AI', kind: 'buff', short: 'AI',
-    desc: '내 턴이 시작될 때 에너지 1을 얻는다.' },
+    desc: '턴 시작시 에너지 1 획득' },
   rice: { name: '쌀먹단', kind: 'buff', short: '쌀',
-    desc: '얻은 뒤 다음 내 턴이 시작될 때까지 체력에 피해를 받지 않으면 체력 10을 회복한다.' },
+    desc: '다음 턴까지 데미지를 받지 않으면 체력 10 회복' },
   hush: { name: '쉿', kind: 'buff', short: '쉿',
-    desc: '내가 가진 기믹이 다른 사람에게 보이지 않는다.' },
+    desc: '자신이 가진 기믹 모두에게 숨기기' },
   paradise: { name: '낙원', kind: 'mixed', short: '낙',
-    desc: '내 턴이 시작될 때 체력이 5 늘어나거나 5 줄어든다 (반반).' },
+    desc: '다음 턴에 체력이 5 증가 혹은 감소함' },
 };
 
-export const GIMMICK_RULE = '자기 턴이 시작될 때 효과를 낸 뒤 1씩 줄어든다.';
+export const GIMMICK_RULE = '중첩으로 쌓이고, 턴 시작 시 1씩 감소';
 
 // 이름이 긴 것부터 찾아야 '성능평가' 같은 이름이 잘리지 않는다
 const BY_NAME = Object.entries(GIMMICKS).sort((a, b) => b[1].name.length - a[1].name.length);

@@ -3,8 +3,8 @@ import { RULES } from './config.js';
 import { CARDS, TYPE, SCOPE } from './cards.js';
 import { Host } from './host.js';
 import { esc, cardHTML, hiddenCardHTML, avatarHTML, galleryHTML, gimmickChipsHTML, gimmickTipHTML } from './view.js';
-import { GIMMICKS } from './gimmicks.js';
-import { cardText, isEdited, editCount, setCardText, resetCard, resetAll, exportJSON, exportCSV } from './editor.js';
+import { GIMMICKS, linkGimmicks } from './gimmicks.js';
+import { cardText, cardName, cardCost, isEdited, editCount, setCardField, resetCard, resetAll, exportJSON, exportCSV } from './editor.js';
 import { CHAR_OPTS, charSVG, defaultChar, validChar, cycleChar } from './chars.js';
 import { playReplay } from './replay.js';
 import * as V from './vfx.js';
@@ -88,7 +88,7 @@ async function boot() {
   document.addEventListener('input', e => {
     const id = e.target.dataset?.edit;
     if (!id) return;
-    setCardText(id, e.target.value);
+    setCardField(id, e.target.dataset.f, e.target.value);
     syncEditor(id);
   });
   document.addEventListener('keydown', e => {
@@ -434,7 +434,7 @@ function onClick(e) {
     case 'deck': S.modal = 'deck'; return render();
     case 'log': S.modal = 'log'; return render();
     case 'close':
-      if (S.modal === 'editor') lastHTML = ''; // 바뀐 설명이 손패·도감에 보이도록 다시 그린다
+      if (S.modal === 'editor') lastHTML = ''; // 바뀐 이름·비용·설명이 손패·도감에 보이도록 다시 그린다
       S.modal = null;
       return render(true);
     case 'takeover':
@@ -468,13 +468,13 @@ function onClick(e) {
     case 'edExportJSON': return exportJSON();
     case 'edExportCSV': return exportCSV();
     case 'edReset': {
-      resetCard(el.dataset.id);
-      const ta = document.querySelector(`textarea[data-edit="${el.dataset.id}"]`);
-      if (ta) ta.value = CARDS[el.dataset.id].text;
-      return syncEditor(el.dataset.id);
+      const id = el.dataset.id;
+      resetCard(id);
+      document.querySelectorAll(`[data-edit="${id}"]`).forEach(inp => { inp.value = CARDS[id][inp.dataset.f]; });
+      return syncEditor(id);
     }
     case 'edResetAll':
-      if (!confirm('수정한 카드 설명을 모두 원래대로 되돌릴까요?')) return;
+      if (!confirm('수정한 카드 이름·비용·설명을 모두 원래대로 되돌릴까요?')) return;
       resetAll();
       lastModal = '';
       return render(true);
@@ -618,7 +618,7 @@ function entryHTML() {
           <span><i class="sq ${playing ? 'live' : ''}"></i>${playing ? '게임 진행 중 · 지금 들어가면 관전' : `대기실 <b class="mono">${n}</b>명 · 서버 정상`}</span>
           <button class="link-btn" data-act="gallery">카드 도감 <span class="mono">${Object.keys(CARDS).length} →</span></button>
         </div>
-        <button class="link-btn soft" data-act="editor">카드 설명 수정해보기 <span class="mono">EDIT →</span></button>
+        <button class="link-btn soft" data-act="editor">카드 수정해보기 <span class="mono">EDIT →</span></button>
       </div>
       ${modeBanner()}
     </main>
@@ -691,7 +691,7 @@ function lobbyHTML() {
           </div>
           <p class="soft">카드를 끌어서 쓰고, 턴을 끝내면 한꺼번에 실행돼요.</p>
           <button class="row-btn" data-act="gallery"><span>카드 도감</span><span class="mono dim">${Object.keys(CARDS).length} →</span></button>
-          <button class="row-btn" data-act="editor"><span>카드 설명 수정해보기</span><span class="mono dim">EDIT →</span></button>
+          <button class="row-btn" data-act="editor"><span>카드 수정해보기</span><span class="mono dim">EDIT →</span></button>
         </div>
       </section>
       <section class="col unit">
@@ -816,7 +816,7 @@ function histStripHTML() {
     const sep = h.r !== round ? `<span class="hc-r mono">R${pad2(h.r)}</span>` : '';
     round = h.r;
     const art = h.id ? `<img src="img/cards/${CARDS[h.id].photo}.webp" alt="" draggable="false">` : '<span class="hc-q mono">?</span>';
-    return `${sep}<span class="hc t-${h.id ? CARDS[h.id].type : 'react'}" title="${esc(name(h.by))}: ${h.id ? esc(CARDS[h.id].name) : '반응 카드'}">${art}<i class="hc-by">${ava(h.by, 'xs')}</i></span>`;
+    return `${sep}<span class="hc t-${h.id ? CARDS[h.id].type : 'react'}" title="${esc(name(h.by))}: ${h.id ? esc(cardName(h.id)) : '반응 카드'}">${art}<i class="hc-by">${ava(h.by, 'xs')}</i></span>`;
   }).join('');
   return `<button class="hist" data-act="log" title="지금까지 낸 카드 전체 보기">${items || '<span class="dim small">아직 낸 카드가 없어요</span>'}</button>`;
 }
@@ -982,7 +982,7 @@ function editorHTML() {
   const list = Object.values(CARDS).sort((a, b) => +a.id.slice(1) - +b.id.slice(1));
   return `<div class="modal"><div class="modal-box wide editor">
     <div class="modal-head">
-      <div class="stack">${lbl('CARD TEXT EDITOR', 'amber')}<h2>카드 설명 수정해보기</h2></div>
+      <div class="stack">${lbl('CARD EDITOR', 'amber')}<h2>카드 수정해보기</h2></div>
       <div class="ed-actions">
         <span class="soft small ed-count">수정 <b class="mono">${editCount()}</b>장</span>
         <button class="btn ghost" data-act="edExportJSON">파일로 내보내기 (JSON)</button>
@@ -992,13 +992,17 @@ function editorHTML() {
       </div>
     </div>
     <div class="modal-body">
-      <p class="soft small">여기서 고친 설명은 <b>이 브라우저에만 저장</b>되고 다시 열어도 유지돼요. 실제 카드 효과는 바뀌지 않아요. 파일로 내보내서 전달하면 그 내용대로 효과를 반영할 수 있어요.</p>
+      <p class="soft small">카드 이름·비용·설명을 고쳐볼 수 있어요. 고친 내용은 <b>이 브라우저에만 저장</b>되고 다시 열어도 유지돼요. 게임에서 실제로 드는 에너지와 카드 효과는 바뀌지 않아요. 파일로 내보내서 전달하면 그 내용대로 반영할 수 있어요.</p>
       <div class="ed-list">${list.map(c => `<div class="ed-item ${isEdited(c.id) ? 'edited' : ''}" data-ed="${c.id}">
         ${cardHTML(c.id, { act: '', size: 'sm' })}
         <div class="ed-form">
-          <div class="ed-title"><span class="mono dim">${c.id.slice(1)}</span><b>${esc(c.name)}</b><span class="lbl">${TYPE[c.type]} · ${SCOPE[c.scope]} · 비용 ${c.cost}</span>${lbl('EDITED', 'amber ed-flag')}</div>
-          <textarea data-edit="${c.id}" rows="3" placeholder="${esc(c.text)}">${esc(cardText(c.id))}</textarea>
-          <div class="ed-orig"><span class="dim small">원래: ${esc(c.text)}</span><button class="link-btn small" data-act="edReset" data-id="${c.id}">이 카드 되돌리기</button></div>
+          <div class="ed-title"><span class="mono dim">${c.id.slice(1)}</span><span class="lbl">${TYPE[c.type]} · ${SCOPE[c.scope]}</span>${lbl('EDITED', 'amber ed-flag')}</div>
+          <div class="ed-row">
+            <label class="ed-name"><span class="lbl">이름</span><input data-edit="${c.id}" data-f="name" maxlength="16" placeholder="${esc(c.name)}" value="${esc(cardName(c.id))}"></label>
+            <label class="ed-cost"><span class="lbl">비용</span><input data-edit="${c.id}" data-f="cost" type="number" min="0" max="9" step="1" inputmode="numeric" placeholder="${c.cost}" value="${cardCost(c.id)}"></label>
+          </div>
+          <textarea data-edit="${c.id}" data-f="text" rows="3" placeholder="${esc(c.text)}">${esc(cardText(c.id))}</textarea>
+          <div class="ed-orig"><span class="dim small">원래: ${esc(c.name)} · 비용 ${c.cost} · ${esc(c.text)}</span><button class="link-btn small" data-act="edReset" data-id="${c.id}">이 카드 되돌리기</button></div>
         </div>
       </div>`).join('')}</div>
     </div>
@@ -1014,7 +1018,7 @@ function renderModal() {
     return;
   }
   if (S.modal === 'gallery') {
-    html = `<div class="modal"><div class="modal-box"><div class="modal-head"><div class="stack">${lbl('CARD INDEX', 'amber')}<h2>카드 도감 ${Object.keys(CARDS).length}</h2></div><div class="ed-actions"><button class="btn ghost" data-act="editor">설명 수정해보기</button><button class="btn ghost" data-act="close">닫기</button></div></div><div class="modal-body">${galleryHTML()}</div></div></div>`;
+    html = `<div class="modal"><div class="modal-box"><div class="modal-head"><div class="stack">${lbl('CARD INDEX', 'amber')}<h2>카드 도감 ${Object.keys(CARDS).length}</h2></div><div class="ed-actions"><button class="btn ghost" data-act="editor">카드 수정해보기</button><button class="btn ghost" data-act="close">닫기</button></div></div><div class="modal-body">${galleryHTML()}</div></div></div>`;
   } else if (S.modal === 'log' && S.pub) {
     const byRound = {};
     for (const h of S.pub.hist || []) (byRound[h.r] ||= []).push(h);
@@ -1076,7 +1080,7 @@ function spawnFx() {
       sfx.ko();
       shakePower = 20;
     } else {
-      const t = { heal: `+${f.v}`, block: `🛡+${f.v}`, nullify: '무효!', react: '반응 설치', strip: '방어도 파괴!', unreact: '반응 무력화!', trigger: `${f.v}!`, debuff: f.v, gimmick: f.v, clone: '분신이 대신 맞음!' }[f.k];
+      const t = { heal: `+${f.v}`, block: `🛡+${f.v}`, nullify: '무효!', react: '반응 설치', strip: '방어도 파괴!', unreact: '반응 무력화!', trigger: `${f.v}!`, debuff: f.v, gimmick: f.v }[f.k];
       if (t) V.text(x, y, t, `f-${f.k} ${f.kind ? `g-${f.kind}` : ''}`);
       if (f.k === 'heal') V.sparkle(x, y);
     }
@@ -1160,8 +1164,11 @@ function syncEditor(id) {
   const item = document.querySelector(`.ed-item[data-ed="${id}"]`);
   if (item) {
     item.classList.toggle('edited', isEdited(id));
-    const t = item.querySelector('.ctext');
-    if (t) t.textContent = cardText(id);
+    const set = (sel, v) => { const t = item.querySelector(sel); if (t) t.textContent = v; };
+    set('.card .cname', cardName(id));
+    set('.card .cost', cardCost(id));
+    const t = item.querySelector('.card .ctext');
+    if (t) t.innerHTML = linkGimmicks(esc(cardText(id)));
   }
   const n = document.querySelector('.ed-count b');
   if (n) n.textContent = editCount();

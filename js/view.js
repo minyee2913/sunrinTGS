@@ -1,7 +1,7 @@
 // 화면 조각을 만드는 함수들
 import { CARDS, TYPE, SCOPE } from './cards.js';
 import { charSVG } from './chars.js';
-import { cardText } from './editor.js';
+import { cardText, cardName, cardCost } from './editor.js';
 import { GIMMICKS, GIMMICK_RULE, linkGimmicks } from './gimmicks.js';
 
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -12,9 +12,9 @@ export function cardHTML(id, { u = '', act = 'card', sel = false, off = false, s
   const cls = ['card', `t-${c.type}`, size, sel && 'sel', off && 'off'].filter(Boolean).join(' ');
   const data = act ? `data-act="${act}" data-u="${u}" data-id="${id}"` : '';
   return `<div class="${cls}" ${data}>
-    <div class="cost">${c.cost}</div>
+    <div class="cost">${cardCost(id)}</div>
     <div class="art">${art}</div>
-    <div class="cname">${esc(c.name)}</div>
+    <div class="cname">${esc(cardName(id))}</div>
     <div class="ctype">${TYPE[c.type]} · ${SCOPE[c.scope]}</div>
     <div class="ctext" data-text-of="${id}">${linkGimmicks(esc(cardText(id)))}</div>
   </div>`;

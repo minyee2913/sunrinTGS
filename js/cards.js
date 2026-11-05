@@ -93,13 +93,20 @@ export const CARDS = {
   p60: { name: '노래방궁극기', cost: 3, type: 'atk', scope: 'others', tag: '폭탄',
     text: '모든 상대에게 피해 7, 둔화 1.', play: c => c.others().forEach(t => { c.attack(t, 7); c.give(t, 'slow', 1); }) },
   p64: { name: '바람의장난', cost: 1, type: 'atk', scope: 'random', tag: '연타',
-    text: '무작위 상대에게 피해 3을 3번 준다.', play: c => { for (let i = 0; i < 3; i++) { const t = c.randomAlive(false); if (t) c.attack(t, 3); } } },
+    text: '무작위 상대에게 피해 3. 분신을 모두 없애고, 없앤 분신 1개당 무작위 상대에게 피해 7.',
+    play: c => {
+      const t = c.randomAlive(false); if (t) c.attack(t, 3);
+      const n = c.me.st.clone || 0;
+      c.gain('clone', -n);
+      for (let i = 0; i < n; i++) { const u = c.randomAlive(false); if (u) c.attack(u, 7); }
+    } },
   p68: { name: '우정의합동기', cost: 3, type: 'atk', scope: 'others', tag: '폭탄',
     text: '모든 상대에게 피해 6. 나는 방어도 6.', play: c => { c.attackOthers(6); c.block(6); } },
   p72: { name: '과제대폭발', cost: 2, type: 'atk', scope: 'all', tag: '폭탄',
     text: '자신을 포함한 전원에게 피해 7.', play: c => { c.attackOthers(7); c.selfDamage(7); } },
-  p84: { name: '삼인방출격', cost: 2, type: 'atk', scope: 'random', tag: '연타',
-    text: '서로 다른 무작위 상대 최대 3명에게 피해 6.', play: c => c.randomOthers(3).forEach(t => c.attack(t, 6)) },
+  p84: { name: '삼인방출격', cost: 2, type: 'atk', scope: 'one', tag: '연타',
+    text: '피해 5. 분신 1개당 피해 5를 한 번 더 준다.',
+    play: c => { for (let i = 0; i <= (c.me.st.clone || 0); i++) c.attack(c.target, 5); } },
 
   // ── 방어 ──
   p18: { name: '괜찮아엄지척', cost: 1, type: 'def', scope: 'self', tag: '반격',
@@ -125,7 +132,7 @@ export const CARDS = {
   p82: { name: '이동식개발팀', cost: 2, type: 'def', scope: 'self', tag: '연타',
     text: '방어도 8. AI 2를 얻는다.', play: c => { c.block(8); c.gain('ai', 2); } },
   p87: { name: '이불갑옷', cost: 2, type: 'def', scope: 'self', tag: '반격',
-    text: '방어도 14.', play: c => c.block(14) },
+    text: '방어도 8. 분신 1개당 방어도 +4.', play: c => c.block(8 + 4 * (c.me.st.clone || 0)) },
   p88: { name: '눈감고버티기', cost: 0, type: 'def', scope: 'self', tag: '반격',
     text: '방어도 9 후 즉시 내 턴 종료.', play: c => { c.block(9); c.endTurn(); } },
 

@@ -187,9 +187,9 @@ function turnStartGimmicks(G, p) {
   }
   if (st.slow && p.hand.length) {
     const n = Math.min(st.slow, p.hand.length);
-    for (let k = 0; k < n; k++) p.discard.push(...p.hand.splice(Math.floor(rand(p) * p.hand.length), 1));
-    fx(G, p.uid, 'gimmick', `${gname('slow')}: 손패 ${n}장 버림`, { g: 'slow', kind: 'debuff' });
-    log(G, `${p.name}의 ${gname('slow')}: 손패 ${n}장 버림`);
+    p.draw.push(...p.hand.splice(-n).reverse());
+    fx(G, p.uid, 'gimmick', `${gname('slow')}: 드로우 -${n}`, { g: 'slow', kind: 'debuff' });
+    log(G, `${p.name}의 ${gname('slow')}: 드로우 -${n}`);
   }
   for (const id of Object.keys(st)) {
     st[id]--;
@@ -298,16 +298,8 @@ function attack(G, src, tgt, n, { pierce = false } = {}) {
     log(G, `${tgt.name}의 반응 발동: ${rc.name}! ${notes.join(', ')}`, 'react');
     fx(G, tgt.uid, 'trigger', rc.name, { id: rc.id });
   }
-  let decoy = false;
-  if (n > 0 && tgt.st.clone) {
-    decoy = true;
-    n = 0;
-    addGimmick(G, tgt, 'clone', -1);
-    fx(G, tgt.uid, 'clone', 0, { s: src.uid });
-    log(G, `${tgt.name}의 ${gname('clone')}이 대신 맞았다`, 'react');
-  }
   const dmg = n > 0 ? hurt(G, tgt, n, { src, pierce }) : 0;
-  if (n <= 0 && !R?.nullify && !decoy) fx(G, tgt.uid, 'dmg', 0, { s: src.uid, b: 0, h: tgt.hp });
+  if (n <= 0 && !R?.nullify) fx(G, tgt.uid, 'dmg', 0, { s: src.uid, b: 0, h: tgt.hp });
   if (dmg > 0 && tgt.alive && tgt.st.manjun) healP(G, tgt, Math.floor(dmg / 2));
   if (src !== tgt && !tgt.atkSince.includes(src.uid)) tgt.atkSince.push(src.uid);
 

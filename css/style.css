@@ -350,6 +350,14 @@ em { font-style: normal; font-size: 11px; font-weight: 700; padding: 1px 6px; ba
 .ed-item.edited .ed-flag { display: inline; }
 .ed-form textarea { width: 100%; resize: vertical; min-height: 64px; padding: 8px 10px; background: var(--panel2); border: 1px solid var(--line2); border-bottom: 2px solid var(--cyan); color: var(--text); font-size: 14px; line-height: 1.5; outline: none; user-select: text; border-radius: 0; }
 .ed-form textarea:focus { border-color: var(--cyan); }
+.ed-row { display: flex; gap: 8px; }
+.ed-row label { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ed-name { flex: 1; }
+.ed-cost { width: 72px; flex: none; }
+.ed-row .lbl { letter-spacing: .08em; font-family: var(--title); font-size: 11px; }
+.ed-row input { width: 100%; height: 36px; padding: 0 10px; background: var(--panel2); border: 1px solid var(--line2); border-bottom: 2px solid var(--cyan); color: var(--text); font-size: 15px; font-weight: 700; outline: none; user-select: text; border-radius: 0; }
+.ed-row input:focus { border-color: var(--cyan); }
+.ed-cost input { font-family: var(--mono-f); text-align: center; }
 .ed-orig { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
 
 #toast { position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 20px); z-index: 60; background: var(--panel); border: 1px solid var(--line2); border-left: 3px solid var(--amber); color: var(--text); font-weight: 600; padding: 12px 18px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; max-width: calc(100% - 32px); }

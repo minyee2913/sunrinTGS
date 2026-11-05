@@ -6,7 +6,7 @@ import { replayMs } from './engine.js';
 import * as V from './vfx.js';
 import { sfx } from './sfx.js';
 
-const STEP = { dmg: 380, ko: 1300, trigger: 420, block: 280, heal: 320, react: 320, nullify: 260, strip: 260, unreact: 280, debuff: 280, gimmick: 300, clone: 340 };
+const STEP = { dmg: 380, ko: 1300, trigger: 420, block: 280, heal: 320, react: 320, nullify: 260, strip: 260, unreact: 280, debuff: 280, gimmick: 300 };
 const CARD_MS = 800; // 낸 카드를 크게 보여주는 시간
 const groupMs = g => CARD_MS + 140 + g.fx.reduce((a, f) => a + (STEP[f.k] || 260), 0) + 240;
 
@@ -213,13 +213,6 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
           await wait(STEP.gimmick);
           break;
         }
-        case 'clone':
-          V.puff(x + 30, y, { color: 'rgba(160,220,255,.6)', n: 12 });
-          V.text(x, y - 40, '분신이 대신 맞음!', 'f-gimmick g-buff');
-          el.querySelector('.clone')?.remove();
-          sfx.blocked();
-          await wait(STEP.clone);
-          break;
       }
     }
     await retreat(A);
