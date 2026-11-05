@@ -1,5 +1,5 @@
 // 턴 종료 전투 연출. 필드에 서 있는 캐릭터들이 엔진이 기록한 replay.plays(카드 묶음과 그 안의 효과 fx)대로 직접 싸운다.
-// 건너뛸 수 없다. 대신 기본 1.4배속이고, 카드가 많으면 정해진 시간(replayMs) 안에 끝나도록 더 빨라진다.
+// 건너뛸 수 없다. 기본 1배속이고, 카드가 많으면 정해진 시간(replayMs) 안에 끝나도록 빨라진다.
 // 연출: 레터박스·비네트, 카드마다 컷인, 대시 잔상, 히트스톱·카메라 펀치·집중선, 연타 카운터, 치명타 임팩트 프레임, 턴 합계.
 import { CARDS, CURSE } from './cards.js';
 import { cardName } from './editor.js';
@@ -21,7 +21,7 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
   const finished = new Promise(r => { done = r; });
   let stopped = false;
   const natural = rep.plays.reduce((a, g) => a + groupMs(g), 0) + TOTAL_MS;
-  const speed = Math.min(1 / 1.4, Math.max(.12, (replayMs(rep.plays) - 150) / natural));
+  const speed = Math.min(1, Math.max(.12, (replayMs(rep.plays) - 150) / natural));
   let hits = { n: 0, dmg: 0 }, turnDmg = 0;
   const motion = createMotion({ speed });
   const reduced = () => globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
