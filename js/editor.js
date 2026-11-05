@@ -8,8 +8,11 @@ let edits = (() => {
   try {
     const o = JSON.parse(localStorage.getItem(KEY)) || {};
     for (const id of Object.keys(o)) {
-      if (!CARDS[id]) delete o[id];
-      else if (typeof o[id] === 'string') o[id] = { text: o[id] };
+      if (!CARDS[id]) { delete o[id]; continue; }
+      if (typeof o[id] === 'string') o[id] = { text: o[id] };
+      // 반영된 수정은 이제 원래 값과 같으므로 지운다
+      for (const f of ['name', 'cost', 'text']) if (o[id][f] === CARDS[id][f]) delete o[id][f];
+      if (!Object.keys(o[id]).length) delete o[id];
     }
     return o;
   } catch { return {}; }

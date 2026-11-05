@@ -880,6 +880,8 @@ function fighterHTML(u, right, plan) {
         ${x.react ? '<b class="bd react">? 반응</b>' : ''}
         ${x.keepBlock ? '<b class="bd block">방어 유지</b>' : ''}
         ${x.enPen ? '<b class="bd pen">에너지 -1</b>' : ''}
+        ${x.enCap ? `<b class="bd pen">에너지 최대 ${x.enCap}</b>` : ''}
+        ${x.enBonus ? `<b class="bd block">에너지 +${x.enBonus}</b>` : ''}
         ${gimmickChipsHTML(st, hidden)}
       </div>
     </div>

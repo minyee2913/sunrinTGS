@@ -82,7 +82,7 @@ export function createGame({ gameId, players, seed, now }) {
       uid, name, char: char || null, hp: RULES.maxHp, maxHp: RULES.maxHp, block: 0, energy: 0, alive: true,
       rng: (seed ^ [...uid].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) | 0, 7)) | 0,
       draw: [], hand: [], discard: [],
-      react: null, drawBonus: 0, enPen: 0, keepBlock: false, st: {}, clean: true,
+      react: null, drawBonus: 0, enPen: 0, enBonus: 0, enCap: 0, keepBlock: false, st: {}, clean: true,
       atkSince: [], atkRecent: [], plays: {}, atkCount: 0, out: null,
       stats: { dealt: 0, taken: 0, self: 0, maxHit: 0, healed: 0, cards: 0, blocked: 0, kills: 0 },
     };
@@ -126,12 +126,18 @@ function beginTurn(G, uid, now) {
   }
   p.atkRecent = p.atkSince;
   p.atkSince = [];
-  p.energy = RULES.energy - p.enPen;
+  p.energy = RULES.energy - p.enPen + (p.enBonus || 0);
   p.enPen = 0;
+  p.enBonus = 0;
   p.plays = {};
   p.atkCount = 0;
   p.drawBonus = 0;
   turnStartGimmicks(G, p);
+  // 꼼짝 마!: 이번 턴 에너지 최대치 고정 (AI로 얻은 에너지까지 포함해서)
+  if (p.enCap) {
+    p.energy = Math.min(p.energy, p.enCap);
+    p.enCap = 0;
+  }
   G.grp = null;
   if (startGrp.fx.length) {
     if (fresh) G.replay.plays.push(startGrp);
@@ -315,7 +321,7 @@ function attack(G, src, tgt, n, { pierce = false } = {}) {
   if (!tgt || !tgt.alive) return 0;
   if (n > 0) n = Math.max(0, n + (src.st.str || 0) - (src.st.weak || 0));
   if (src.st.buta && tgt.st.manjun) n *= 2;
-  const rc = tgt.react && !G.noReact ? CARDS[tgt.react] : null;
+  const rc = tgt.react && !G.noReact && !CARDS[tgt.react].react?.swing && !CARDS[tgt.react].react?.redirect ? CARDS[tgt.react] : null;
   const R = rc?.react;
   let reflect = 0;
   const notes = [];
@@ -329,6 +335,9 @@ function attack(G, src, tgt, n, { pierce = false } = {}) {
     if (R.curse) notes.push(`${src.name}의 손패에 ${CARDS[CURSE].name} ${R.curse}장`);
     if (R.penalty) notes.push(`${src.name}의 다음 턴 드로우·에너지 감소`);
     if (R.drawBonus) notes.push(`다음 턴 카드 +${R.drawBonus}`);
+    if (R.drain) notes.push(`${src.name}의 에너지 -${R.drain}`);
+    for (const [id, k] of Object.entries(R.give || {})) notes.push(`${src.name}에게 ${gname(id)} ${k}`);
+    for (const [id, k] of Object.entries(R.gain || {})) notes.push(`${gname(id)} ${k} 획득`);
     log(G, `${tgt.name}의 반응 발동: ${rc.name}! ${notes.join(', ')}`, 'react');
     fx(G, tgt.uid, 'trigger', rc.name, { id: rc.id });
   }
@@ -336,6 +345,7 @@ function attack(G, src, tgt, n, { pierce = false } = {}) {
   if (n <= 0 && !R?.nullify) fx(G, tgt.uid, 'dmg', 0, { s: src.uid, b: 0, h: tgt.hp });
   if (dmg > 0 && tgt.alive && tgt.st.manjun) healP(G, tgt, Math.floor(dmg / 2));
   if (src !== tgt && !tgt.atkSince.includes(src.uid)) tgt.atkSince.push(src.uid);
+  if (dmg > 0) swing(G, tgt);
 
   if (R) {
     if (R.drawBonus && tgt.alive) giveDraw(G, tgt, R.drawBonus);
@@ -343,8 +353,39 @@ function attack(G, src, tgt, n, { pierce = false } = {}) {
     if (src.alive && reflect) hurt(G, src, reflect, { src: tgt });
     if (src.alive && R.curse) { addCards(G, src, CURSE, R.curse, 'hand'); fx(G, src.uid, 'debuff', `${CARDS[CURSE].name} +${R.curse}`); }
     if (src.alive && R.penalty) { addGimmick(G, src, 'slow', 1); src.enPen = 1; fx(G, src.uid, 'debuff', '에너지 -1'); }
+    if (src.alive && R.drain) { src.energy = Math.max(0, src.energy - R.drain); fx(G, src.uid, 'debuff', `에너지 -${R.drain}`); }
+    for (const [id, k] of Object.entries(R.give || {})) if (src.alive) addGimmick(G, src, id, k);
+    for (const [id, k] of Object.entries(R.gain || {})) if (tgt.alive) addGimmick(G, tgt, id, k);
   }
   return dmg;
+}
+
+// 스윙: 다른 사람이 공격으로 피해를 입으면, 이 반응을 설치한 사람이 그 사람에게 바로 피해를 준다
+function swing(G, hit) {
+  if (G.noReact || !hit.alive) return;
+  for (const u of G.order) {
+    const q = P(G, u);
+    const rc = q.react && CARDS[q.react];
+    const R = rc?.react;
+    if (!R?.swing || q === hit || !q.alive) continue;
+    q.react = null;
+    log(G, `${q.name}의 반응 발동: ${rc.name}! ${hit.name}에게 피해 ${R.swing}`, 'react');
+    fx(G, q.uid, 'trigger', rc.name, { id: rc.id });
+    hurt(G, hit, R.swing, { src: q });
+    if (!hit.alive) return;
+  }
+}
+
+// 공간 전이: 나를 대상으로 고른 카드를 무작위 다른 사람에게 돌린다 (돌릴 사람이 없으면 무효)
+function redirect(G, p, target) {
+  if (G.noReact || !target?.react || !CARDS[target.react].react?.redirect) return target;
+  const rc = CARDS[target.react];
+  target.react = null;
+  const pool = othersOf(G, p).filter(t => t !== target);
+  const to = pool.length ? pool[Math.floor(rand(G) * pool.length)] : null;
+  log(G, `${target.name}의 반응 발동: ${rc.name}! ${to ? `카드가 ${to.name}에게 향한다` : '카드가 무효가 됐다'}`, 'react');
+  fx(G, target.uid, 'trigger', rc.name, { id: rc.id });
+  return to;
 }
 
 function addCards(G, p, id, n, where) {
@@ -394,6 +435,16 @@ function makeCtx(G, p, card, target) {
     addCards: (t, id, n, where) => { addCards(G, t, id, n, where); fx(G, t.uid, 'debuff', `${CARDS[id].name} +${n}`); },
     stripBlock: t => { if (t.block) fx(G, t.uid, 'strip', t.block); t.block = 0; },
     swapBlock: t => { [p.block, t.block] = [t.block, p.block]; fx(G, p.uid, 'block', p.block); fx(G, t.uid, 'block', t.block); },
+    takeBlock: (t, n) => { n = Math.min(t.block, n); if (n > 0) { t.block -= n; fx(G, t.uid, 'strip', n); } return n; },
+    clearGimmicks: t => {
+      if (!t?.alive || !Object.keys(t.st).length) return;
+      t.st = {};
+      fx(G, t.uid, 'debuff', '기믹 모두 제거');
+      log(G, `${t.name}의 기믹이 모두 사라졌다`);
+    },
+    energyBonus: (t, n) => { if (t?.alive) { t.enBonus = (t.enBonus || 0) + n; fx(G, t.uid, 'gimmick', `다음 턴 에너지 +${n}`, { kind: 'buff' }); } },
+    energyCap: (t, n) => { if (t?.alive) { t.enCap = n; fx(G, t.uid, 'debuff', `다음 턴 에너지 최대 ${n}`); } },
+    playsThisTurn: () => Object.values(p.plays).reduce((a, b) => a + b, 0),
     topOther: () => others().reduce((a, t) => (!a || t.hp > a.hp ? t : a), null),
     lowestOther: () => others().reduce((a, t) => (!a || t.hp < a.hp ? t : a), null),
     randomAlive: withSelf => pickRandom(withSelf ? [p, ...others()].filter(t => t.alive) : others()),
@@ -464,9 +515,12 @@ export function playCard(G, uid, cardU, targetUid, now) {
   if (card.type === 'react') G.last.id = null;
 
   group(G, { k: 'card', by: uid, id: G.last.id, t: card.type, tg });
+  const was = target;
+  target = redirect(G, p, target);
+  if (was && target !== was) G.grp.tg = G.last.tg = target ? [target.uid] : [];
   const ctx = makeCtx(G, p, card, target);
-  card.play(ctx);
-  G.grp.tg = card.scope === 'random' || card.scope === 'top' ? [...new Set(ctx.hits)] : tg;
+  if (!was || target) card.play(ctx);
+  G.grp.tg = card.scope === 'random' || card.scope === 'top' ? [...new Set(ctx.hits)] : was && target !== was ? G.last.tg : tg;
   // 공개 기록: 반응 카드는 무엇인지 숨긴다 (id null)
   (G.hist ||= []).push({ n: G.last.n, by: uid, id: G.last.id, tg: G.grp.tg, r: G.round });
   G.grp = null;
@@ -638,7 +692,7 @@ export function publicView(G) {
     players[u] = {
       name: p.name, hp: p.hp, maxHp: p.maxHp, block: p.block, energy: p.energy, alive: p.alive,
       react: !!p.react, hand: p.hand.length, draw: p.draw.length, discard: p.discard.length,
-      char: p.char, deck: deckOf(p).length, enPen: p.enPen,
+      char: p.char, deck: deckOf(p).length, enPen: p.enPen, enBonus: p.enBonus || 0, enCap: p.enCap || 0,
       st: p.st.hush ? { hush: p.st.hush } : p.st, stHidden: !!p.st.hush, keepBlock: p.keepBlock, out: p.out, stats: p.stats,
     };
   }
