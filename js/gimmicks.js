@@ -15,7 +15,7 @@ export const GIMMICKS = {
     desc: '가하는 데미지가 1 증가' },
   weak: { name: '성능평가', kind: 'debuff', short: '성',
     desc: '가하는 데미지가 1 감소' },
-  dex: { name: '줴줴이야', kind: 'buff', short: '줴',
+  dex: { name: '요이', kind: 'buff', short: '요',
     desc: '얻는 보호막 1 증가' },
   buta: { name: '부타', kind: 'buff', short: '부',
     desc: '만준에게 넣는 데미지 2배' },

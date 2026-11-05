@@ -838,7 +838,7 @@ function battleHTML() {
         <div class="pips">${pips}</div>
       </div>
       ${!myTurn && hand.length ? `<div class="hand-label">${lbl('NEXT HAND')}다음 턴 손패 · 내 턴에 사용</div>` : ''}
-      <div class="hand ${hand.length > 6 ? 'tight' : ''} ${myTurn ? '' : 'waiting'}">${hand.map(c => cardHTML(c.id, { u: c.u, sel: S.sel === c.u, off: !!blockReason(c) })).join('') || `<p class="dim">${myTurn ? '손패를 모두 예약했어요' : '손패 없음'}</p>`}</div>
+      <div class="hand ${hand.length > 6 ? 'tight' : ''} ${myTurn ? '' : 'waiting'}" style="--n:${hand.length || 1}">${hand.map(c => cardHTML(c.id, { u: c.u, sel: S.sel === c.u, off: !!blockReason(c) })).join('') || `<p class="dim">${myTurn ? '손패를 모두 예약했어요' : '손패 없음'}</p>`}</div>
       <div class="dock-side">
         ${p.phase === 'battle' ? `<div class="timer dockt ${myTurn ? '' : 'other'}" data-deadline="${p.deadline}">${lbl(myTurn ? 'TIME' : `${curName}의 턴`)}<span class="tv"></span><i></i></div>` : `<div class="dockt-idle">${lbl('WAIT')}</div>`}
         ${myTurn ? `<button class="btn ghost undo" data-act="undo" ${plan.length && !S.pending ? '' : 'disabled'}>되돌리기</button>` : ''}
@@ -853,7 +853,6 @@ function battleHTML() {
     : p.phase === 'ended' ? '<span class="turn-tag">결과 집계</span>' : '<span class="turn-tag amber-line">카드 선택</span>';
 
   return `<div class="screen battle ${me ? '' : 'spectating'}">
-    <div class="rotate-hint">${lbl('TIP')}가로 화면으로 돌리면 더 잘 보여요</div>
     <header class="topbar2 battle-top">
       <div class="tb-left">
         <div class="stack">${lbl('ROUND')}<b class="mono round">${pad2(p.round)}</b></div>

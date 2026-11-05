@@ -182,14 +182,8 @@ body.aiming .field-hint { display: none; }
 }
 
 @media (orientation: portrait) and (max-width: 760px) {
-  .field { flex-direction: column; align-items: stretch; justify-content: flex-end; padding: 2% 3%; }
-  .field .side.l { justify-content: flex-start; }
-  .field .side.r { flex-wrap: wrap; justify-content: flex-end; flex: 0 1 auto; }
-  .fighter, .field.n4 .fighter, .field.n5 .fighter, .field.n6 .fighter { --fw: min(26vw, 13vh, 110px); }
-  .card.xs { --cw: min(17vw, 74px); }
   .peek { flex-direction: column; }
   .peek-side { max-width: 90%; align-items: center; }
-  .hist { height: 40px; }
 }
 @media (orientation: landscape) and (max-height: 500px) {
     .f-badges { min-height: 0; }
@@ -307,8 +301,45 @@ body.aiming .fighter.locked .f-body { filter: drop-shadow(0 0 10px var(--red)); 
   .field-title { top: 30%; padding: 4px 0; }
   .card.xs { --cw: min(7vw, 16vh, 60px); }
 }
+/* 세로 폰: 상대는 위쪽 줄(많으면 두 줄), 나는 아래 왼쪽. 예약 줄·안내는 내 옆 빈자리에 */
 @media (orientation: portrait) and (max-width: 760px) {
-  .field { margin: 0 12px; }
+  .field { margin: 0 8px; padding: 6px 2% 8px; flex-direction: column-reverse; justify-content: space-between; align-items: stretch; gap: 8px; }
+  .field-floor { height: 30%; }
+  .field .side.r { flex: none; flex-wrap: wrap; justify-content: center; align-items: flex-end; gap: 10px 4%; }
+  .field .side.l { flex: none; justify-content: flex-start; gap: 4%; padding-left: 3%; }
+  .field .fighter, .field.n4 .fighter { --fw: min(28vw, 17vh, 150px); }
+  .field .fighter.me { --fw: min(34vw, 17vh, 170px); }
+  .field.n2 .side.r .fighter, .field.n3 .side.r .fighter { --fw: min(40vw, 20vh, 180px); }
+  .field.n5 .fighter, .field.n6 .fighter { --fw: min(26vw, 10vh, 110px); }
+  .field.n5 .fighter.me, .field.n6 .fighter.me { --fw: min(30vw, 11vh, 120px); }
+  .f-name { font-size: 12px; overflow: hidden; }
+  .f-name .lbl { display: none; }
+  .f-num { font-size: 12px; }
+  .f-hp { height: 6px; }
+  .gm { height: 16px; font-size: 9px; padding: 0 4px; }
+  .gm b { font-size: 10px; }
+  .hist { height: 34px; }
+  .hc { width: 24px; height: 30px; }
+  .card.xs { --cw: min(11vw, 46px); }
+  .plan-strip, .field-hint { left: auto; right: 8px; top: auto; bottom: 8px; transform: none; max-width: 60%; }
+  .plan-strip { flex-direction: column; align-items: flex-end; gap: 4px; padding: 6px 8px; }
+  .plan-strip .plan-head { align-items: flex-end; }
+  .plan-row { flex-wrap: wrap; justify-content: flex-end; }
+  .field-hint { white-space: normal; text-align: right; flex-direction: column; align-items: flex-end; gap: 2px; line-height: 1.4; }
+  .field-note { top: 40%; max-width: 94%; white-space: normal; flex-wrap: wrap; justify-content: center; }
+  .peek { gap: 10px; padding: 8px; }
+  .peek .card.big { --cw: min(46vw, 27vh, 200px); }
+  .peek-side { text-align: center; }
+  .field-banner .card { --cw: min(28vw, 17vh, 130px); }
+  .field-title b { font-size: 22px; }
+}
+/* 세로인데 키가 작은 폰(SE 등): 손패와 캐릭터를 조금 더 줄인다 */
+@media (orientation: portrait) and (max-width: 760px) and (max-height: 700px) {
+  :root { --cw: min(22vw, 17vh, 120px); }
+  .field .fighter, .field.n4 .fighter { --fw: min(26vw, 14vh, 130px); }
+  .field .fighter.me { --fw: min(30vw, 14vh, 140px); }
+  .field.n5 .fighter, .field.n6 .fighter, .field.n5 .fighter.me, .field.n6 .fighter.me { --fw: min(24vw, 8vh, 90px); }
+  .field-hint { display: none; }
 }
 
 

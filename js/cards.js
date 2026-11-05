@@ -110,7 +110,7 @@ export const CARDS = {
 
   // ── 방어 ──
   p18: { name: '괜찮아엄지척', cost: 1, type: 'def', scope: 'self', tag: '반격',
-    text: '방어도 5. 줴줴이야 2를 얻는다.', play: c => { c.block(5); c.gain('dex', 2); } },
+    text: '방어도 5. 요이 2를 얻는다.', play: c => { c.block(5); c.gain('dex', 2); } },
   p19: { name: '빙벽세우기', cost: 2, type: 'def', scope: 'self', tag: '반격',
     text: '방어도 12. 반응 카드가 설치되어 있으면 방어도 +4.', play: c => c.block(c.me.react ? 16 : 12) },
   p20: { name: '책상엄폐', cost: 1, type: 'def', scope: 'self', tag: '연타',
@@ -120,7 +120,7 @@ export const CARDS = {
   p23: { name: '계산된방어', cost: 1, type: 'def', scope: 'self', tag: '연타',
     text: '방어도 3. 지금 손패 1장당 방어도 +2.', play: c => c.block(3 + 2 * c.me.hand.length) },
   p24: { name: '든든한지원', cost: 0, type: 'def', scope: 'self', tag: '반격', limit: 1,
-    text: '줴줴이야 1을 얻은 뒤 방어도 3. 한 턴에 1번.', play: c => { c.gain('dex', 1); c.block(3); } },
+    text: '요이 1을 얻은 뒤 방어도 3. 한 턴에 1번.', play: c => { c.gain('dex', 1); c.block(3); } },
   p25: { name: '귀찮음의장벽', cost: 2, type: 'def', scope: 'self', tag: '반격',
     text: '방어도 10. 다음 내 턴 시작 때 방어도가 사라지지 않는다.', play: c => { c.block(10); c.keepBlock(); } },
   p51: { name: '볼빵빵방어', cost: 1, type: 'def', scope: 'self', tag: '반격',
@@ -257,7 +257,7 @@ export const CARDS = {
   p108: { name: '카펫말이', cost: 1, type: 'def', scope: 'self', tag: '반격',
     text: '방어도 5. 다음 내 턴 시작 때 방어도가 사라지지 않는다.', play: c => { c.block(5); c.keepBlock(); } },
   p109: { name: '눈사람갑옷', cost: 2, type: 'def', scope: 'self', tag: '반격',
-    text: '줴줴이야 2를 얻은 뒤 방어도 8.', play: c => { c.gain('dex', 2); c.block(8); } },
+    text: '요이 2를 얻은 뒤 방어도 8.', play: c => { c.gain('dex', 2); c.block(8); } },
   p110: { name: '그림자숨기', cost: 1, type: 'def', scope: 'self', tag: '반격',
     text: '방어도 4. 쉿 2, 분신 1을 얻는다.', play: c => { c.block(4); c.gain('hush', 2); c.gain('clone', 1); } },
   p111: { name: '가방으로막기', cost: 1, type: 'def', scope: 'self', tag: '연타',
