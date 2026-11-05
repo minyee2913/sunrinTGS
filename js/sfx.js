@@ -130,6 +130,13 @@ export const sfx = {
     tone({ f: 220, f2: 440, type: 'sawtooth', dur: .22, vol: .08 });
     [440, 554, 659].forEach(f => tone({ f, type: 'square', dur: .16, vol: .05, t: .2 }));
   },
+  // 회방: 유리 깨지는 소리 + 낮은 쿵
+  ambush() {
+    if (!ok()) return;
+    noise({ dur: .4, vol: .45, f: 6000, f2: 1800, q: 1.5 });
+    tone({ f: 80, f2: 30, type: 'sine', dur: .6, vol: .9, t: .02 });
+    [1568, 1175, 784].forEach((f, i) => tone({ f, type: 'square', dur: .12, vol: .06, t: .05 + i * .07 }));
+  },
   // 내려찍기: 묵직한 착지음
   slam() {
     if (!ok()) return;

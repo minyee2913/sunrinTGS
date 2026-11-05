@@ -141,9 +141,10 @@ function beginTurn(G, uid, now) {
   }
   p.atkRecent = p.atkSince;
   p.atkSince = [];
-  p.energy = RULES.energy - p.enPen + (p.enBonus || 0);
+  p.energy = Math.max(0, RULES.energy - p.enPen + (p.enBonus || 0) - (p.enDebt || 0));
   p.enPen = 0;
   p.enBonus = 0;
+  p.enDebt = 0;
   p.plays = {};
   p.atkCount = 0;
   p.drawBonus = 0;
@@ -264,6 +265,9 @@ export function endTurn(G, uid, now, reason = '') {
   if (G.phase !== 'battle' || G.cur !== uid) return '내 턴이 아니에요';
   const p = P(G, uid);
   if (reason === 'timeout') log(G, `${p.name}의 시간 초과`);
+  // 이 턴에 몰래 쓴 회방 카드가 마지막에 한꺼번에 발동한다
+  resolveAmbush(G);
+  if (G.phase !== 'battle') return null;
   if (p.alive) {
     for (const c of p.hand) {
       const n = CARDS[c.id].endInHand;
@@ -275,8 +279,9 @@ export function endTurn(G, uid, now, reason = '') {
     }
   }
   G.grp = null;
-  p.discard.push(...p.hand);
-  p.hand = [];
+  // 보존 카드는 손에 남긴다
+  p.discard.push(...p.hand.filter(c => !CARDS[c.id].retain));
+  p.hand = p.hand.filter(c => CARDS[c.id].retain);
   p.energy = 0;
   // 다음 턴 손패를 미리 뽑아 둔다 (내 턴에만 쓸 수 있다). 이번 턴에 걸린 내 드로우 증감을 여기서 반영한다.
   if (p.alive) draw(G, p, RULES.drawPerTurn + p.drawBonus);
@@ -571,6 +576,49 @@ export function playCard(G, uid, cardU, targetUid, now) {
   return null;
 }
 
+// ── 회방 ──
+// 다른 사람의 턴에 몰래 쓴다. 호스트만 알고(손패·덱 장수도 그대로 보인다), 그 턴이 끝날 때 마지막에 공개·발동한다.
+export function playAmbush(G, uid, cardU) {
+  if (G.phase !== 'battle' || !G.cur || G.cur === uid) return '회방은 다른 사람의 턴에만 쓸 수 있어요';
+  const p = P(G, uid);
+  if (!p?.alive) return '탈락해서 쓸 수 없어요';
+  const i = p.hand.findIndex(c => c.u === cardU);
+  if (i < 0) return '손패에 없는 카드예요';
+  if (!CARDS[p.hand[i].id].ambush) return '회방 카드가 아니에요';
+  if (p.ambushQ?.length) return '회방은 한 턴에 한 장만 쓸 수 있어요';
+  (p.ambushQ ||= []).push(p.hand.splice(i, 1)[0]);
+  (G.ambush ||= []).push(uid);
+  return null;
+}
+
+function resolveAmbush(G) {
+  if (G.noReact || !G.ambush?.length) return;
+  const order = G.ambush;
+  G.ambush = [];
+  for (const by of order) {
+    const p = P(G, by);
+    const inst = p.ambushQ?.shift();
+    if (!inst) continue;
+    const card = CARDS[inst.id];
+    if (!card.exhaust) p.discard.push(inst);
+    if (!p.alive || G.phase !== 'battle') continue;
+    const cur = P(G, G.cur);
+    const target = card.scope === 'one' ? (cur?.alive && cur !== p ? cur : othersOf(G, p)[0] || null) : null;
+    if (card.scope === 'one' && !target) continue;
+    p.enDebt = (p.enDebt || 0) + card.cost;
+    const tg = targetsOf(G, p, card, target);
+    log(G, `회방! ${p.name} ▶ ${card.name}${target ? ` → ${target.name}` : ''}`, 'play');
+    group(G, { k: 'ambush', by, id: inst.id, t: card.type, tg });
+    const ctx = makeCtx(G, p, card, target);
+    if (ctx.boost > 1) fx(G, by, 'comeback', ctx.boost);
+    card.play(ctx);
+    G.grp.tg = card.scope === 'random' || card.scope === 'top' ? [...new Set(ctx.hits)] : tg;
+    (G.hist ||= []).push({ n: ++G.lastSeq, by, id: inst.id, tg: G.grp.tg, r: G.round, amb: true });
+    G.grp = null;
+    if (checkWin(G)) return;
+  }
+}
+
 // ── 예약 / 되돌리기 / 턴 확정 ──
 // 예약한 카드를 반응 없이 가상으로 진행한 상태 (내 손패·에너지 표시용)
 export function provisional(G) {
@@ -717,7 +765,7 @@ export function tick(G, now) {
   return false;
 }
 
-const deckOf = p => [...p.draw, ...p.discard, ...p.hand];
+const deckOf = p => [...p.draw, ...p.discard, ...p.hand, ...(p.ambushQ || [])];
 const byCard = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 // ── 공개 정보 / 개인 정보 ──
@@ -726,7 +774,7 @@ export function publicView(G) {
   for (const [u, p] of Object.entries(G.players)) {
     players[u] = {
       name: p.name, hp: p.hp, maxHp: p.maxHp, block: p.block, energy: p.energy, alive: p.alive,
-      react: !!p.react, hand: p.hand.length, draw: p.draw.length, discard: p.discard.length,
+      react: !!p.react, hand: p.hand.length + (p.ambushQ?.length || 0), draw: p.draw.length, discard: p.discard.length,
       char: p.char, deck: deckOf(p).length, enPen: p.enPen, enBonus: p.enBonus || 0, enCap: p.enCap || 0,
       st: p.st.hush ? { hush: p.st.hush } : p.st, stHidden: !!p.st.hush, keepBlock: p.keepBlock, out: p.out, stats: p.stats,
     };
@@ -753,6 +801,7 @@ export function privateView(G, uid, prov = G) {
     energy: p.energy,
     st: p.st,
     plan: mine ? G.plan.acts.map(a => ({ id: a.id, target: a.target })) : [],
+    ambush: (p.ambushQ || []).map(c => c.id),
     react: p.react,
     plays: p.plays,
     atkCount: p.atkCount,
@@ -776,6 +825,7 @@ export function handleRequest(G, uid, reqId, r, now) {
   else if (r.type === 'play') err = planPlay(G, uid, r.card, r.target, now);
   else if (r.type === 'undo') err = undoPlan(G, uid);
   else if (r.type === 'end') err = commitTurn(G, uid, now);
+  else if (r.type === 'ambush') err = r.turnNo !== G.turnNo ? '이미 지나간 턴이에요' : playAmbush(G, uid, r.card);
   else if (r.type === 'pick') err = pickCard(G, uid, r.card || null, now);
   else if (r.type === 'remove') err = removeCard(G, uid, r.card || null, now);
   else err = '알 수 없는 요청';

@@ -11,6 +11,7 @@ import * as V from './vfx.js';
 import { sfx } from './sfx.js';
 import { createMotion } from './motion.js';
 
+const AMBUSH_MS = 950; // 회방! 등장
 const STEP = { dmg: 440, ko: 1600, comeback: 620, trigger: 440, block: 300, heal: 340, react: 320, nullify: 280, strip: 280, unreact: 280, debuff: 280, gimmick: 300 };
 const CARD_MS = 1050; // 카드 컷인 시간
 const CRIT = 10;      // 이 피해부터 치명타 연출
@@ -21,7 +22,7 @@ const STYLE = {      // 공격 모션별 색
   dash: { c: '#9fe8ff', tint: 'cyan' }, hop: { c: '#ffb15c', tint: 'amber' },
   punch: { c: '#ffd23f', tint: 'amber' }, cast: { c: '#c3a6ff', tint: 'violet' },
 };
-const groupMs = g => CARD_MS + 140 + (g.by ? CAM_MS * 2 : 0) + (g.t === 'atk' ? 420 : 0)
+const groupMs = g => (g.k === 'ambush' ? AMBUSH_MS : 0) + CARD_MS + 140 + (g.by ? CAM_MS * 2 : 0) + (g.t === 'atk' ? 420 : 0)
   + g.fx.reduce((a, f) => a + (STEP[f.k] || 260) + (f.k === 'dmg' && f.v >= CRIT ? 380 : 0), 0) + 240;
 
 export function playReplay(rep, { field, shakeEl, players, nameOf }) {
@@ -244,14 +245,14 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
     const x = actorEl ? center(actorEl).x - fr.left : fr.width / 2;
     const left = Math.min(fr.width - 70, Math.max(70, x));
     const T = CARD_MS * speed;
-    if (g.k === 'card' || g.k === 'curse') {
+    if (g.k === 'card' || g.k === 'curse' || g.k === 'ambush') {
       // 화면을 가로지르는 컷인을 보여준 뒤, 사용한 캐릭터 머리 위에 카드를 작게 남긴다
       const id = g.k === 'curse' ? g.id || CURSE : g.id;
       const c = id && CARDS[id];
       V.cutIn({
         art: c ? `img/cards/${c.photo}.webp` : null,
         name: c ? cardName(id) : '반응 카드',
-        sub: `${g.by ? nameOf(g.by) : ''} · ${c ? `${TYPE_NAME[c.type]} 카드` : '숨겨진 카드'}`,
+        sub: `${g.k === 'ambush' ? '회방 · ' : ''}${g.by ? nameOf(g.by) : ''} · ${c ? `${TYPE_NAME[c.type]} 카드` : '숨겨진 카드'}`,
         type: c?.type || 'react',
         rarity: c?.rarity,
         flip: !!actorEl?.classList.contains('r'),
@@ -290,6 +291,16 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
     const lit = new Set([actor, ...g.fx.flatMap(f => [f.u, f.s])].filter(Boolean));
     field.classList.add('focusing');
     for (const el of field.querySelectorAll('.fighter')) el.classList.toggle('lit', g.k === 'sudden' || lit.has(el.dataset.u));
+    if (g.k === 'ambush') {
+      // 회방: 아무도 몰랐던 카드가 마지막에 갑자기 튀어나온다
+      const c = A && center(A);
+      V.ambushReveal(nameOf(actor), AMBUSH_MS * speed);
+      if (c) { camTo(c, 1.2, 200); V.rays(c.x, c.y, { n: 40, colors: ['#c3a6ff', '#fff'], r1: 30, life: 500 }); V.shards(c.x, c.y, { colors: ['#c3a6ff', '#fff', '#ff3b5c'] }); }
+      V.shake(shakeEl, 18, 400);
+      sfx.ambush();
+      await wait(AMBUSH_MS);
+      if (stopped) return;
+    }
     showBanner(g, A);
     await wait(CARD_MS * .72);
     if (stopped) return;
@@ -297,7 +308,7 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
     if (A) camTo(center(A), 1.16);
     await wait(CARD_MS * .28 + 60);
     if (stopped) return;
-    if (A && g.k === 'card' && g.t !== 'atk') {
+    if (A && (g.k === 'card' || g.k === 'ambush') && g.t !== 'atk') {
       motion.play(A, g.t === 'def' ? 'guard' : 'cast');
       const c = center(A);
       squash(A);

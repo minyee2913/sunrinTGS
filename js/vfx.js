@@ -312,6 +312,17 @@ export function cutIn({ art = null, name = '', sub = '', type = 'atk', rarity = 
   setTimeout(() => el.remove(), ms + 40);
 }
 
+// 회방 등장: 화면이 찢어지듯 갈라지며 '회방!' 도장
+export function ambushReveal(name, ms = 950) {
+  impactFrame(110);
+  flash('rgba(160,110,255,.55)', 260);
+  const el = layer('ambush');
+  el.innerHTML = '<i class="am-tear t"></i><i class="am-tear b"></i><div class="am-word"><b>회방!</b><small></small></div>';
+  el.querySelector('small').textContent = `${name}의 숨겨둔 한 수`;
+  el.style.setProperty('--ms', `${ms}ms`);
+  setTimeout(() => el.remove(), ms + 60);
+}
+
 // 임팩트 프레임: 한순간 화면을 반전·고대비로
 export function impactFrame(ms = 90) {
   if (reduced()) return;

@@ -19,8 +19,16 @@ export function cardHTML(id, { u = '', act = 'card', sel = false, off = false, s
     <div class="art">${art}</div>
     <div class="cname">${esc(cardName(id))}</div>
     <div class="ctype">${TYPE[c.type]} · ${SCOPE[c.scope]}</div>
-    <div class="ctext" data-text-of="${id}">${linkGimmicks(esc(cardText(id)))}${R?.boost ? ` <span class="cb" data-kw="comeback" data-n="${R.boost}">역전 ×${R.boost}</span>` : ''}</div>
+    <div class="ctext" data-text-of="${id}">${c.ambush ? '<span class="kw amb" data-kw="ambush">회방</span> ' : ''}${c.retain ? '<span class="kw ret" data-kw="retain">보존</span> ' : ''}${linkGimmicks(esc(cardText(id)))}${R?.boost ? ` <span class="cb" data-kw="comeback" data-n="${R.boost}">역전 ×${R.boost}</span>` : ''}</div>
   </div>`;
+}
+
+export function keywordTipHTML(kw) {
+  const K = {
+    retain: ['보존', '턴이 끝나도 버리지 않고 손에 남아요. 다음 턴 카드는 따로 뽑아요.'],
+    ambush: ['회방', '다른 사람의 턴에 손패에서 위로 끌어 올려 몰래 써요. 그 턴이 끝날 때 마지막에 갑자기 발동해요. 그 전까지 다른 사람은 몰라요. 비용만큼 내 다음 턴 에너지가 줄고, 한 턴에 한 장만 쓸 수 있어요. 상대 1명 카드는 그 턴을 진행한 사람에게 써요.'],
+  }[kw];
+  return `<div class="tip-head"><b>${K[0]}</b><span class="lbl amber">카드 키워드</span></div><p>${K[1]}</p>`;
 }
 
 export function comebackTipHTML(boost) {

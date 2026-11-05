@@ -2,7 +2,7 @@ import { createNet, rid } from './net.js';
 import { RULES } from './config.js';
 import { CARDS, TYPE, SCOPE } from './cards.js';
 import { Host } from './host.js';
-import { esc, cardHTML, hiddenCardHTML, avatarHTML, galleryHTML, gimmickChipsHTML, gimmickTipHTML, comebackTipHTML } from './view.js';
+import { esc, cardHTML, hiddenCardHTML, avatarHTML, galleryHTML, gimmickChipsHTML, gimmickTipHTML, comebackTipHTML, keywordTipHTML } from './view.js';
 import { GIMMICKS, linkGimmicks } from './gimmicks.js';
 import { cardText, cardName, cardCost, isEdited, editCount, setCardField, resetCard, resetAll, exportJSON, exportCSV } from './editor.js';
 import { CHARACTERS, charSVG, defaultChar, validChar, cycleChar } from './chars.js?v=sprite-paths-2';
@@ -525,6 +525,12 @@ const myTurnNow = () => S.pub?.phase === 'battle' && S.pub.cur === S.uid;
 function blockReason(c) {
   const p = S.pub, me = p?.players[S.uid], priv = myPriv();
   const d = CARDS[c.id];
+  if (d.ambush) {
+    if (!me?.alive || !priv || p.phase !== 'battle' || !p.cur) return '지금은 쓸 수 없어요';
+    if (p.cur === S.uid) return '회방 카드는 다른 사람의 턴에만 쓸 수 있어요';
+    if (priv.ambush?.length) return '회방은 한 턴에 한 장만 쓸 수 있어요';
+    return '';
+  }
   if (!me || !priv || p.phase !== 'battle' || p.cur !== S.uid) return '내 턴에만 쓸 수 있어요';
   if (priv.energy < d.cost) return '에너지가 부족해요';
   if (d.limit && (priv.plays?.[c.id] || 0) >= d.limit) return `한 턴에 ${d.limit}번까지 쓸 수 있어요`;
@@ -567,8 +573,9 @@ function startDrag(e) {
   D.moved = true;
   D.card = CARDS[D.id];
   D.why = S.pending ? '처리 중이에요' : blockReason({ id: D.id });
+  D.ambush = !!D.card.ambush;
   D.blind = D.card.scope === 'one' && !!myPriv()?.st?.blind;
-  D.aim = D.card.scope === 'one' && !D.why && !D.blind;
+  D.aim = D.card.scope === 'one' && !D.why && !D.blind && !D.ambush;
   S.sel = null;
   const r = D.el.getBoundingClientRect();
   D.w = r.width;
@@ -578,7 +585,7 @@ function startDrag(e) {
   const layer = $('#drag');
   layer.innerHTML = `<div class="drag-ghost ${D.why ? 'no' : ''}">${cardHTML(D.id, { act: '' })}</div>
     <svg class="drag-arrow" width="100%" height="100%"><path class="arrow-line"/><path class="arrow-head"/></svg>
-    <div class="drag-hint">${D.why ? esc(D.why) : D.aim ? '상대 캐릭터에게 끌어다 놓기' : D.blind ? '실명: 위로 끌어 올리면 무작위 상대에게' : '위로 끌어 올려 사용'}</div>`;
+    <div class="drag-hint">${D.why ? esc(D.why) : D.ambush ? '위로 끌어 올리면 몰래 회방 · 이 턴이 끝날 때 발동' : D.aim ? '상대 캐릭터에게 끌어다 놓기' : D.blind ? '실명: 위로 끌어 올리면 무작위 상대에게' : '위로 끌어 올려 사용'}</div>`;
   D.ghost = layer.querySelector('.drag-ghost');
   D.ghost.style.width = `${D.w}px`;
   D.ghost.querySelector('.card').style.setProperty('--cw', `${D.w}px`);
@@ -652,7 +659,9 @@ function endDrag(e) {
   sfx.card();
   D.ghost.animate([{ transform: D.ghost.style.transform, opacity: 1 }, { transform: `translate(${tx - D.w / 2}px, ${ty - D.h / 2}px) scale(.3)`, opacity: 0 }],
     { duration: 220, easing: 'cubic-bezier(.5,0,.9,.5)' }).onfinish = clear;
-  if (sendReq('play', { card: D.u, target })) S.hiddenU = D.u;
+  if (D.ambush) {
+    if (sendReq('ambush', { card: D.u })) { S.hiddenU = D.u; toast('회방 준비! 이 턴이 끝날 때 발동해요'); }
+  } else if (sendReq('play', { card: D.u, target })) S.hiddenU = D.u;
 }
 
 // ── 클릭 처리 ──
@@ -1109,7 +1118,8 @@ function battleHTML() {
         <div class="en-num mono"><b>${energy}</b><span>/${RULES.energy}</span></div>
         <div class="pips">${pips}</div>
       </div>
-      ${!myTurn && hand.length ? `<div class="hand-label">${lbl('NEXT HAND')}다음 턴 손패 · 내 턴에 사용</div>` : ''}
+      ${!myTurn && priv?.ambush?.length ? `<div class="hand-label amb">${lbl('회방 대기', 'amber')}${esc(cardName(priv.ambush[0]))} · 이 턴이 끝날 때 발동</div>`
+        : !myTurn && hand.length ? `<div class="hand-label">${lbl('NEXT HAND')}다음 턴 손패 · 내 턴에 사용${hand.some(c => CARDS[c.id].ambush) ? ' · 회방 카드는 지금 쓸 수 있어요' : ''}</div>` : ''}
       <div class="hand ${hand.length > 6 ? 'tight' : ''} ${myTurn ? '' : 'waiting'}" style="--n:${hand.length || 1}">${hand.map(c => cardHTML(c.id, { u: c.u, sel: S.sel === c.u, off: !!blockReason(c), hot: behindNow })).join('') || `<p class="dim">${myTurn ? '손패를 모두 예약했어요' : '손패 없음'}</p>`}</div>
       <div class="dock-side">
         ${p.phase === 'battle' ? `<div class="timer dockt ${myTurn ? '' : 'other'}" data-deadline="${p.deadline}">${lbl(myTurn ? 'TIME' : `${curName}의 턴`)}<span class="tv"></span><i></i></div>` : `<div class="dockt-idle">${lbl('WAIT')}</div>`}
@@ -1405,14 +1415,14 @@ const rnd = n => Math.floor(Math.random() * n);
 let tipPinned = false;
 function showTip(el, pin = false) {
   const id = el.dataset.gk || el.dataset.gm;
-  if (!GIMMICKS[id] && el.dataset.kw !== 'comeback') return;
+  if (!GIMMICKS[id] && !el.dataset.kw) return;
   let tip = $('#tip');
   if (!tip) {
     tip = document.createElement('div');
     tip.id = 'tip';
     document.body.appendChild(tip);
   }
-  tip.innerHTML = el.dataset.kw === 'comeback' ? comebackTipHTML(+el.dataset.n) : gimmickTipHTML(id, el.dataset.n ? +el.dataset.n : null)
+  tip.innerHTML = el.dataset.kw === 'comeback' ? comebackTipHTML(+el.dataset.n) : el.dataset.kw ? keywordTipHTML(el.dataset.kw) : gimmickTipHTML(id, el.dataset.n ? +el.dataset.n : null)
     + (el.dataset.gm === 'hush' && el.querySelector('i') ? '<p class="tip-rule">이 사람의 기믹은 쉿 때문에 보이지 않아요.</p>' : '');
   tip.className = 'show';
   const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;

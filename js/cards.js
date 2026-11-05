@@ -363,6 +363,15 @@ export const RARITY = {
 };
 const LEGEND = ['p67', 'p12', 'p60', 'p68', 'p140', 'p106'];
 const EPIC = ['p05', 'p11', 'p15', 'p63', 'p44', 'p92', 'p96', 'p98', 'p99', 'p56', 'p83', 'p139'];
+// ── 키워드 ──
+// 보존(retain): 턴이 끝나도 버리지 않고 손에 남는다.
+// 회방(ambush): 다른 사람의 턴에 몰래 쓴다. 그 턴이 끝날 때 마지막에 공개·발동되고, 비용은 내 다음 턴 에너지에서 빠진다.
+//   '상대 1명' 카드는 그 턴을 진행한 사람에게 쓴다.
+const RETAIN = ['p19', 'p51', 'p73', 'p49', 'p67', 'p15', 'p12', 'p55'];
+const AMBUSH = ['p78', 'p65', 'p10', 'p38', 'p57', 'p75', 'p61', 'p03'];
+for (const id of RETAIN) CARDS[id].retain = true;
+for (const id of AMBUSH) CARDS[id].ambush = true;
+
 for (const c of Object.values(CARDS)) {
   c.rarity = LEGEND.includes(c.id) ? 'legend' : EPIC.includes(c.id) ? 'epic' : c.cost >= 2 && !c.basic ? 'rare' : 'common';
 }
