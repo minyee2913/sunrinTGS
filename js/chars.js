@@ -1,6 +1,8 @@
 // c는 캐릭터 번호. 나머지 필드는 기존 저장/네트워크 형식과 호환한다.
 const CAST_NAMES = ['펀치만준', '따봉훈', '레이저훈', '하키훈', '지각훈', '불꽃훈', '알파훈', '개구리', 'Mr.윤', '부따만준', '이강불', '시원주성', 'SSR 이건', '휴가주성', '낼름채호', '퀵성태'];
 const ATTACK_MOTIONS = ['punch', 'hop', 'cast', 'hop', 'dash', 'cast', 'punch', 'hop', 'cast', 'cast', 'punch', 'cast', 'hop', 'dash', 'punch', 'cast'];
+// CSS 변수 안의 상대 URL은 fx.css 기준으로 해석된다. 모듈 위치에서 절대 URL로 만든다.
+const assetURL = path => new URL(`../${path}`, import.meta.url).href;
 export const CHARACTERS = ['p01', 'p02', 'p03', 'p04', 'p06', 'p09', 'p11', 'p13', 'p65', 'p74', 'p53', 'p64', 'p67', 'p80', 'p88', 'p85']
   .map((card, i) => ({ card, name: CAST_NAMES[i] ?? `캐릭터 ${i + 1}`, number: i + 1,
     motion: ATTACK_MOTIONS[i],
@@ -25,7 +27,7 @@ export function charSVG(ch, { head = false } = {}) {
   const i = validChar(ch) ? ch.c : 0;
   if (!head) {
     const character = CHARACTERS[i];
-    return `<span class="char card-character sprite-player" style="--sprite-sheet:url('${character.sheet}');--sprite-aspect:${character.cellAspect}" aria-hidden="true"><span class="sprite-frames"></span></span>`;
+    return `<span class="char card-character sprite-player" style="--sprite-sheet:url('${assetURL(character.sheet)}');--sprite-aspect:${character.cellAspect}" aria-hidden="true"><span class="sprite-frames"></span></span>`;
   }
   if (CHARACTERS[i].image) {
     const headBox = CHARACTERS[i].card === 'p85' ? '65 90 270 240' : '65 15 270 240';

@@ -1,6 +1,6 @@
 // 화면 조각을 만드는 함수들
 import { CARDS, TYPE, SCOPE } from './cards.js';
-import { charSVG } from './chars.js';
+import { charSVG } from './chars.js?v=sprite-paths-2';
 import { cardText, cardName, cardCost } from './editor.js';
 import { GIMMICKS, GIMMICK_RULE, linkGimmicks } from './gimmicks.js';
 

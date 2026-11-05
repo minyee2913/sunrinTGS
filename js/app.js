@@ -5,7 +5,7 @@ import { Host } from './host.js';
 import { esc, cardHTML, hiddenCardHTML, avatarHTML, galleryHTML, gimmickChipsHTML, gimmickTipHTML } from './view.js';
 import { GIMMICKS, linkGimmicks } from './gimmicks.js';
 import { cardText, cardName, cardCost, isEdited, editCount, setCardField, resetCard, resetAll, exportJSON, exportCSV } from './editor.js';
-import { CHARACTERS, charSVG, defaultChar, validChar, cycleChar } from './chars.js';
+import { CHARACTERS, charSVG, defaultChar, validChar, cycleChar } from './chars.js?v=sprite-paths-2';
 import { playReplay } from './replay.js';
 import { liveMotion } from './motion.js';
 import * as V from './vfx.js';

@@ -2,9 +2,25 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, access } from 'node:fs/promises';
 
-const load = async path => import('data:text/javascript;base64,' + Buffer.from(await readFile(new URL(path, import.meta.url))).toString('base64'));
+const load = async (path, moduleURL = new URL(path, import.meta.url).href) => {
+  const source = (await readFile(new URL(path, import.meta.url), 'utf8')).replaceAll('import.meta.url', JSON.stringify(moduleURL));
+  return import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
+};
 const { createMotion, spriteFrames, SPRITE_ROWS } = await load('../js/motion.js');
 const { CHARACTERS, charSVG } = await load('../js/chars.js');
+
+test('sprite URLs stay correct on GitHub project Pages and custom-domain roots', async () => {
+  for (const base of ['https://minyee2913.github.io/sunrinTGS/', 'https://game.example/']) {
+    const { CHARACTERS, charSVG } = await load('../js/chars.js', base + 'js/chars.js');
+    for (let i = 0; i < CHARACTERS.length; i++) {
+      const html = charSVG({ c: i, hair: 0, face: 0, acc: 0 });
+      const url = html.match(/--sprite-sheet:url\('([^']+)'\)/)[1];
+      assert.equal(url, base + CHARACTERS[i].sheet);
+      // Resolving from an external CSS file must not introduce /css/img/.
+      assert.equal(new URL(url, base + 'css/fx.css').href, url);
+    }
+  }
+});
 
 test('every character renders its own sheet and keeps a separate static head portrait', async () => {
   const paths = new Set();
