@@ -29,13 +29,29 @@ export const GIMMICKS = {
     desc: '자신이 가진 기믹 모두에게 숨기기' },
   paradise: { name: '낙원', kind: 'mixed', short: '낙',
     desc: '다음 턴에 체력이 5 증가 혹은 감소함' },
+  // 예? → 엄 → 티~원 → 줴줴이야~ 순서로 자기 턴마다 5% 확률로 바뀐다 (next)
+  ye: { name: '예?', kind: 'debuff', short: '예', next: 'eom',
+    desc: '자신의 턴마다 체력이 1 감소함. (5% 확률로 [엄]으로 변경)' },
+  eom: { name: '엄', kind: 'debuff', short: '엄', next: 'tione',
+    desc: '자신의 턴마다 체력이 2 감소함. (5% 확률로 [티~원]으로 변경)' },
+  tione: { name: '티~원', kind: 'buff', short: '티', next: 'jjdeath',
+    desc: '자신의 턴마다 체력을 5 회복합니다. (5% 확률로 [줴줴이야~]로 변경)' },
+  jjdeath: { name: '줴줴이야~', kind: 'debuff', short: '줴~',
+    desc: '자신이 사망합니다.' },
 };
+
+export const CHANGE_CHANCE = 0.05;
 
 export const GIMMICK_RULE = '중첩으로 쌓이고, 턴 시작 시 1씩 감소';
 
 // 이름이 긴 것부터 찾아야 '성능평가' 같은 이름이 잘리지 않는다
 const BY_NAME = Object.entries(GIMMICKS).sort((a, b) => b[1].name.length - a[1].name.length);
-const RE = new RegExp(`(${BY_NAME.map(([, g]) => g.name).join('|')})`, 'g');
+// '엄'처럼 한 글자인 이름은 '엄지' 같은 낱말 속에서는 찾지 않는다
+const pat = n => {
+  const e = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return n.length === 1 ? `(?<![가-힣])${e}(?=$|[^가-힣]|(?:을|이|은|과|의|으로)(?![가-힣]))` : e;
+};
+const RE = new RegExp(`(${BY_NAME.map(([, g]) => pat(g.name)).join('|')})`, 'g');
 const ID_OF = Object.fromEntries(BY_NAME.map(([id, g]) => [g.name, id]));
 
 // 이미 이스케이프된 카드 설명에서 기믹 이름을 눌러볼 수 있는 링크로 바꾼다

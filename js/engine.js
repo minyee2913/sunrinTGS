@@ -6,7 +6,7 @@
 //   반응 결과를 미리 보고 되돌리는 일을 막기 위해서다.
 //   턴 종료(commitTurn) 때 예약한 카드를 반응까지 포함해 실제로 처리한다.
 import { CARDS, STARTER, REWARD_POOL, CURSE } from './cards.js';
-import { GIMMICKS } from './gimmicks.js';
+import { GIMMICKS, CHANGE_CHANCE } from './gimmicks.js';
 import { RULES } from './config.js';
 
 // ── 난수 (mulberry32, 상태를 G.rng에 보관) ──
@@ -158,6 +158,38 @@ export function addGimmick(G, t, id, n) {
   if (id === 'rice' && after > before) t.clean = true;
   const hidden = t.st.hush && id !== 'hush';
   fx(G, t.uid, 'gimmick', hidden ? '기믹 ?' : `${g.name} ${after > before ? '+' : ''}${after - before}`, { g: hidden ? null : id, kind: g.kind });
+  if (id === 'jjdeath' && after) dieByJjdeath(G, t);
+}
+
+function dieByJjdeath(G, t) {
+  log(G, `${t.name}의 ${gname('jjdeath')}: 사망`, 'out');
+  kill(G, t, null);
+}
+
+// 예? → 엄 → 티~원 → 줴줴이야~. 효과를 낸 뒤 5% 확률로 다음 단계로 바뀐다 (중첩은 그대로).
+// 바뀐 기믹이 같은 턴에 또 효과를 내지 않도록 뒤 단계부터 처리한다.
+function chainGimmicks(G, p) {
+  const st = p.st;
+  for (const id of ['tione', 'eom', 'ye']) {
+    const n = st[id];
+    if (!n || !p.alive) continue;
+    if (id === 'tione') {
+      log(G, `${p.name}의 ${gname(id)}: 체력 ${5 * n} 회복`);
+      healP(G, p, 5 * n);
+    } else {
+      const loss = (id === 'ye' ? 1 : 2) * n;
+      log(G, `${p.name}의 ${gname(id)}: 체력 -${loss}`);
+      hurt(G, p, loss, { pierce: true });
+    }
+    if (!p.alive || rand(G) >= CHANGE_CHANCE) continue;
+    const to = GIMMICKS[id].next;
+    delete st[id];
+    st[to] = (st[to] || 0) + n;
+    const hidden = st.hush;
+    fx(G, p.uid, 'gimmick', hidden ? '기믹 ?' : `${gname(id)} → ${gname(to)}!`, { g: hidden ? null : to, kind: GIMMICKS[to].kind });
+    log(G, `${p.name}의 ${gname(id)}이(가) ${gname(to)}(으)로 바뀌었다`);
+    if (to === 'jjdeath') dieByJjdeath(G, p);
+  }
 }
 
 function turnStartGimmicks(G, p) {
@@ -173,6 +205,8 @@ function turnStartGimmicks(G, p) {
       hurt(G, p, 5, { pierce: true });
     }
   }
+  if (!p.alive) return;
+  chainGimmicks(G, p);
   if (!p.alive) return;
   if (st.rice) {
     if (p.clean) {
