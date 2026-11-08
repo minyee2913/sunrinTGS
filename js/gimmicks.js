@@ -1,6 +1,6 @@
 // 기믹 (상태 효과). 엔진과 화면이 함께 쓴다.
 // 공통 규칙(기획서): 슬더슬처럼 중첩으로 쌓이고, 턴 시작 시 모두 1씩 감소한다.
-// 최대치가 없으면 무한 중첩. 감소는 그 기믹을 가진 사람의 턴이 시작될 때, 턴 시작 효과를 낸 뒤에 한다.
+// keep이 붙은 기믹(예?·엄·티~원)은 줄지 않는다. 최대치가 없으면 무한 중첩. 감소는 그 기믹을 가진 사람의 턴이 시작될 때, 턴 시작 효과를 낸 뒤에 한다.
 // desc는 기획서 문구 그대로 둔다.
 // kind: buff(이로운) / debuff(해로운) / mixed(운에 달림)
 
@@ -30,11 +30,11 @@ export const GIMMICKS = {
   paradise: { name: '낙원', kind: 'mixed', short: '낙',
     desc: '다음 턴에 체력이 5 증가 혹은 감소함' },
   // 예? → 엄 → 티~원 → 줴줴이야~ 순서로 자기 턴마다 5% 확률로 바뀐다 (next)
-  ye: { name: '예?', kind: 'debuff', short: '예', next: 'eom',
+  ye: { name: '예?', kind: 'debuff', short: '예', next: 'eom', keep: true,
     desc: '자신의 턴마다 체력이 1 감소함. (5% 확률로 [엄]으로 변경)' },
-  eom: { name: '엄', kind: 'debuff', short: '엄', next: 'tione',
+  eom: { name: '엄', kind: 'debuff', short: '엄', next: 'tione', keep: true,
     desc: '자신의 턴마다 체력이 2 감소함. (5% 확률로 [티~원]으로 변경)' },
-  tione: { name: '티~원', kind: 'buff', short: '티', next: 'jjdeath',
+  tione: { name: '티~원', kind: 'buff', short: '티', next: 'jjdeath', keep: true,
     desc: '자신의 턴마다 체력을 5 회복합니다. (5% 확률로 [줴줴이야~]로 변경)' },
   jjdeath: { name: '줴줴이야~', kind: 'debuff', short: '줴~',
     desc: '자신이 사망합니다.' },
@@ -42,7 +42,7 @@ export const GIMMICKS = {
 
 export const CHANGE_CHANCE = 0.05;
 
-export const GIMMICK_RULE = '중첩으로 쌓이고, 턴 시작 시 1씩 감소 (남의 턴에 새로 받은 중첩은 바로 다음 내 턴 시작에는 줄지 않음)';
+export const GIMMICK_RULE = '중첩으로 쌓이고, 턴 시작 시 1씩 감소 (남의 턴에 새로 받은 중첩은 바로 다음 내 턴 시작에는 줄지 않음. 예?·엄·티~원은 줄지 않음)';
 
 // 이름이 긴 것부터 찾아야 '성능평가' 같은 이름이 잘리지 않는다
 const BY_NAME = Object.entries(GIMMICKS).sort((a, b) => b[1].name.length - a[1].name.length);

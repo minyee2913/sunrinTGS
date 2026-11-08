@@ -10,6 +10,7 @@ import { playReplay } from './replay.js';
 import { liveMotion } from './motion.js';
 import * as V from './vfx.js';
 import { sfx, music, unlockAudio, isMuted, setMuted } from './sfx.js';
+import { EX_NAMES, exRate, buyPrice, sellPrice } from './economy.js';
 
 const store = {
   get: k => { try { return localStorage.getItem(k); } catch { return null; } },
@@ -31,6 +32,9 @@ const S = {
   replay: null, replaySeen: undefined, replayGame: null,
   resultSeen: null,
   abortArm: 0,
+  ex: { from: 'hp', to: 'en', k: 1 }, // 환전 창에서 고른 것
+  tr: { to: null, cards: [], gold: 0, askGold: 0, askK: 0 }, // 거래 제안 창
+  trPick: [], trPickN: null, // 받은 거래 제안에 내줄 카드
 };
 
 const $ = s => document.querySelector(s);
@@ -451,7 +455,7 @@ function sendReq(type, data = {}) {
   const id = rid();
   S.pending = id;
   S.pendingAt = Date.now();
-  const body = { gameId: S.pub.gameId, turnNo: S.pub.turnNo, type, card: data.card ?? null, target: data.target ?? null, t: S.net.now() };
+  const body = { gameId: S.pub.gameId, turnNo: S.pub.turnNo, type, card: data.card ?? null, target: data.target ?? null, x: data.x ?? null, t: S.net.now() };
   S.net.set(`req/${S.uid}/${id}`, body).catch(e => {
     console.error(e);
     S.pending = null;
@@ -773,6 +777,43 @@ function onClick(e) {
     case 'remSel': S.removeSel = S.removeSel === el.dataset.u ? null : el.dataset.u; return render();
     case 'remove': return sendReq('remove', { card: S.removeSel });
     case 'remSkip': return sendReq('remove', { card: null });
+    // 돈: 상점 · 환전 · 거래
+    case 'shop': case 'exchange': S.modal = act; return render();
+    case 'trade': {
+      const ok = u => S.pub?.players[u]?.alive && u !== S.uid;
+      if (!ok(S.tr.to)) S.tr.to = S.pub.order.find(ok) || null;
+      S.modal = 'trade';
+      return render();
+    }
+    case 'buy': return sendReq('buy', { card: el.dataset.id });
+    case 'sell': return sendReq('sell', { card: el.dataset.u });
+    case 'exFrom': case 'exTo': {
+      const k = el.dataset.k, other = act === 'exFrom' ? 'to' : 'from';
+      S.ex[act === 'exFrom' ? 'from' : 'to'] = k;
+      if (S.ex[other] === k) S.ex[other] = Object.keys(EX_NAMES).find(x => x !== k);
+      return render();
+    }
+    case 'exK': S.ex.k = Math.max(1, Math.min(99, S.ex.k + +el.dataset.d)); return render();
+    case 'exGo': return sendReq('exchange', { x: { ...S.ex } });
+    case 'trTo': S.tr.to = el.dataset.u; return render();
+    case 'trCard': {
+      const u = el.dataset.u;
+      S.tr.cards = S.tr.cards.includes(u) ? S.tr.cards.filter(x => x !== u) : [...S.tr.cards, u];
+      return render();
+    }
+    case 'trNum': S.tr[el.dataset.f] = Math.max(0, Math.min(99, S.tr[el.dataset.f] + +el.dataset.d)); return render();
+    case 'trSend':
+      if (sendReq('trade', { x: { to: S.tr.to, cards: S.tr.cards, gold: S.tr.gold, askGold: S.tr.askGold, askK: S.tr.askK } })) S.tr.cards = [];
+      return;
+    case 'trCancel': return sendReq('tradeCancel');
+    case 'trPick': {
+      const u = el.dataset.u, k = myPriv()?.trade?.ask.k || 0;
+      if (S.trPick.includes(u)) S.trPick = S.trPick.filter(x => x !== u);
+      else if (S.trPick.length < k) S.trPick = [...S.trPick, u];
+      return render();
+    }
+    case 'trAccept': return sendReq('tradeReply', { x: { n: myPriv()?.trade?.n, accept: true, cards: S.trPick } });
+    case 'trDecline': return sendReq('tradeReply', { x: { n: myPriv()?.trade?.n, accept: false } });
   }
 }
 
@@ -811,6 +852,7 @@ function flushRender() {
 let lastHTML = '';
 function render(force = false) {
   if (!S.net || !S.ready) return;
+  renderPick(); // 전투 연출 중에는 숨긴다
   // 카드를 끄는 중이거나 필드에서 전투 연출 중에는 화면을 다시 그리지 않는다
   if (S.drag?.moved || S.replay) { S.renderPending = true; return; }
   const scr = screen();
@@ -1014,6 +1056,8 @@ function fighterHTML(u, right, plan) {
         <div class="f-hp ${pct <= 30 ? 'low' : ''}"><i style="width:${pct}%"></i><span>${x.hp}/${x.maxHp}</span></div>
       </div>
       <div class="f-badges">
+        <b class="bd gold" title="돈">돈 ${x.gold ?? 0}</b>
+        ${p.trade?.from === u ? `<b class="bd trade">거래 제안 → ${esc(name(p.trade.to))}</b>` : ''}
         ${x.react ? '<b class="bd react">? 반응</b>' : ''}
         ${x.keepBlock ? '<b class="bd block">방어 유지</b>' : ''}
         ${x.enPen ? '<b class="bd pen">에너지 -1</b>' : ''}
@@ -1117,6 +1161,7 @@ function battleHTML() {
         ${lbl('ENERGY')}
         <div class="en-num mono"><b>${energy}</b><span>/${RULES.energy}</span></div>
         <div class="pips">${pips}</div>
+        <div class="gold-row">${lbl('돈')}<b class="mono">${priv?.gold ?? me.gold ?? 0}</b></div>
       </div>
       ${!myTurn && priv?.ambush?.length ? `<div class="hand-label amb">${lbl('회방 대기', 'amber')}${esc(cardName(priv.ambush[0]))} · 이 턴이 끝날 때 발동</div>`
         : !myTurn && hand.length ? `<div class="hand-label">${lbl('NEXT HAND')}다음 턴 손패 · 내 턴에 사용${hand.some(c => CARDS[c.id].ambush) ? ' · 회방 카드는 지금 쓸 수 있어요' : ''}</div>` : ''}
@@ -1125,6 +1170,11 @@ function battleHTML() {
         ${p.phase === 'battle' ? `<div class="timer dockt ${myTurn ? '' : 'other'}" data-deadline="${p.deadline}">${lbl(myTurn ? 'TIME' : `${curName}의 턴`)}<span class="tv"></span><i></i></div>` : `<div class="dockt-idle">${lbl('WAIT')}</div>`}
         ${myTurn ? `<button class="btn ghost undo" data-act="undo" ${plan.length && !S.pending ? '' : 'disabled'}>되돌리기</button>` : ''}
         <button class="btn primary cut2 end" data-act="end" ${myTurn && !S.pending ? '' : 'disabled'}><b>턴 종료</b><small>${plan.length ? `${plan.length}장 실행` : ''}</small></button>
+        ${p.phase === 'battle' ? `<div class="econ-btns">
+          <button class="tg" data-act="shop" title="카드 사고팔기">상점</button>
+          <button class="tg" data-act="exchange" title="체력·에너지·돈 바꾸기">환전</button>
+          <button class="tg" data-act="trade" title="다른 사람과 거래">거래</button>
+        </div>` : ''}
         <button class="stat3" data-act="deck" title="내 덱 보기"><span><i>덱</i><b class="mono">${me.deck}</b></span><span><i>뽑을</i><b class="mono">${me.draw}</b></span><span><i>버림</i><b class="mono">${me.discard}</b></span></button>
       </div>
     </footer>`;
@@ -1160,8 +1210,30 @@ function battleHTML() {
       ${fieldOverlayHTML(myTurn, selCard)}
     </main>
     ${dock}
-    ${S.replay ? '' : pickOverlayHTML()}
   </div>`;
+}
+
+// 보상·덱 정리 선택 창은 #app 밖(#pick)에 따로 그린다. 다른 사람의 선택·채팅 등으로 화면을 다시 그려도
+// 창이 다시 만들어지며 깜빡이지(페이드인·카드 그림 다시 불러오기) 않게, 구성이 같으면 선택 표시와 버튼만 고친다.
+let pickShown = '';
+function renderPick() {
+  const box = $('#pick');
+  if (!box) return;
+  const html = screen() === 'battle' && !S.replay ? pickOverlayHTML() : '';
+  const p = S.pub, priv = myPriv(), s = priv?.pick;
+  const key = html && [p.gameId, p.round, s.stage, p.deadline, s.stage === 'pick' ? s.opts.join() : priv.deck.map(c => c.u).join()].join('|');
+  if (key !== pickShown) {
+    const reopen = !!pickShown && !!key; // 열려 있던 창을 고쳐 그릴 때는 페이드인을 다시 하지 않는다
+    box.innerHTML = html;
+    pickShown = key;
+    if (reopen) box.firstElementChild.style.animation = 'none';
+  }
+  if (!key) return;
+  const pend = !!S.pending;
+  for (const c of box.querySelectorAll('.card[data-act="pickSel"]')) c.classList.toggle('sel', S.pickSel === c.dataset.id);
+  for (const c of box.querySelectorAll('.card[data-act="remSel"]')) c.classList.toggle('sel', S.removeSel === c.dataset.u);
+  const can = { pickSkip: !pend, pick: !!S.pickSel && !pend, remSkip: !pend, remove: !!S.removeSel && !pend };
+  for (const b of box.querySelectorAll('button[data-act]')) if (b.dataset.act in can) b.disabled = !can[b.dataset.act];
 }
 
 function pickOverlayHTML() {
@@ -1177,7 +1249,7 @@ function pickOverlayHTML() {
         <button class="btn ghost" data-act="pickSkip" ${S.pending ? 'disabled' : ''}>건너뛰기</button>
         <button class="btn primary cut" data-act="pick" ${S.pickSel && !S.pending ? '' : 'disabled'}><b>덱에 추가</b><span class="mono">→</span></button>
       </div>
-      <p class="dim small">시간이 지나면 건너뛰기로 처리돼요. 고른 카드는 다음 셔플부터 나와요.</p>
+      <p class="dim small">시간이 지나면 건너뛰기로 처리돼요. 고른 카드는 바로 손으로 와요 (손패가 꽉 차 있어도).</p>
     </div>`;
   }
   return `<div class="overlay pick remove">
@@ -1284,9 +1356,123 @@ function editorHTML() {
   </div></div>`;
 }
 
+// ── 돈: 상점 · 환전 · 거래 창 ──
+const stepper = (act, v, extra = '') => `<span class="stepper"><button class="sq-btn" data-act="${act}" data-d="-1" ${extra}>−</button><b class="mono">${v}</b><button class="sq-btn" data-act="${act}" data-d="1" ${extra}>+</button></span>`;
+
+function tradeSide(n, gold, pick = false) {
+  return [n && `카드 ${n}장${pick ? '(상대가 고름)' : ''}`, gold && `돈 ${gold}`].filter(Boolean).join(' + ') || '없음';
+}
+
+function econModalHTML(kind) {
+  const p = S.pub, priv = myPriv(), me = p?.players[S.uid];
+  if (!priv || !me) return '';
+  const myTurn = myTurnNow() && me.alive;
+  const busy = S.pending ? 'disabled' : '';
+  const hand = priv.hand.filter(c => c.u !== S.hiddenU);
+  const locked = priv.trade?.from === S.uid ? priv.trade.give.cards.map(c => c.u) : [];
+  const wallet = `<div class="wallet">${lbl('체력')}<b class="mono">${me.hp}</b>${lbl('에너지')}<b class="mono">${priv.energy}</b>${lbl('돈')}<b class="mono gold">${priv.gold}</b></div>`;
+  const note = myTurn ? '<p class="soft small">바로 적용되고 되돌릴 수 없어요.</p>' : '<p class="why small">내 턴에만 할 수 있어요. 지금은 둘러보기만 돼요.</p>';
+  let body = '';
+  if (kind === 'shop') {
+    body = `<h3>${lbl('BUY')} 사기 <small>라운드마다 새로 채워져요 · 산 카드는 바로 손으로 와요</small></h3>
+      <div class="shop-grid">${priv.shop.map(id => `<div class="shop-item">${cardHTML(id, { act: '', size: 'sm' })}
+        <button class="btn primary" data-act="buy" data-id="${id}" ${myTurn && priv.gold >= buyPrice(id) && !S.pending ? '' : 'disabled'}>돈 ${buyPrice(id)}</button></div>`).join('') || '<p class="soft">이번 라운드 상점 카드를 모두 샀어요.</p>'}</div>
+      <h3>${lbl('SELL')} 팔기 <small>손패 카드를 산 값의 절반에 팔아요 · 예약한 카드는 팔 수 없어요</small></h3>
+      <div class="shop-grid">${hand.map(c => {
+        const no = CARDS[c.id].curse || locked.includes(c.u);
+        return `<div class="shop-item">${cardHTML(c.id, { act: '', size: 'sm' })}
+        <button class="btn ghost" data-act="sell" data-u="${c.u}" ${myTurn && !no && !S.pending ? '' : 'disabled'}>${CARDS[c.id].curse ? '못 팔아요' : locked.includes(c.u) ? '거래 중' : `+${sellPrice(c.id)}`}</button></div>`;
+      }).join('') || '<p class="soft">팔 수 있는 손패가 없어요.</p>'}</div>`;
+  } else if (kind === 'exchange') {
+    const { from, to, k } = S.ex, r = exRate(from, to), give = r.give * k, get = r.get * k;
+    const seg = (act, cur) => `<div class="seg">${Object.entries(EX_NAMES).map(([key, n]) => `<button class="${cur === key ? 'on' : ''}" data-act="${act}" data-k="${key}">${n}</button>`).join('')}</div>`;
+    const have = { hp: me.hp - 1, en: priv.energy, gold: priv.gold }[from];
+    const why = !myTurn ? ''
+      : give > have ? `${EX_NAMES[from]}이(가) 모자라요`
+      : to === 'hp' && me.hp + get > me.maxHp ? `체력은 최대 ${me.maxHp}까지예요`
+      : to === 'en' && priv.exEn + get > RULES.exEnergyMax ? `환전 에너지는 한 턴에 ${RULES.exEnergyMax}까지예요` : '';
+    body = `<div class="ex">
+      <p class="soft small">가치: 에너지 1 = 체력 ${RULES.exRate.en / RULES.exRate.hp} = 돈 ${RULES.exRate.en / RULES.exRate.gold}. 체력은 1 아래로 내릴 수 없고, 환전으로 얻는 에너지는 한 턴에 ${RULES.exEnergyMax}까지예요 (이번 턴 ${priv.exEn}).</p>
+      <div class="ex-row">${lbl('주기')}${seg('exFrom', from)}</div>
+      <div class="ex-row">${lbl('받기')}${seg('exTo', to)}</div>
+      <div class="ex-row">${lbl('양')}${stepper('exK', `×${k}`)}</div>
+      <div class="ex-preview"><b>${EX_NAMES[from]} ${give}</b><span class="mono">→</span><b>${EX_NAMES[to]} ${get}</b></div>
+      ${why ? `<p class="why small">${why}</p>` : ''}
+      <button class="btn primary cut" data-act="exGo" ${myTurn && !why ? busy : 'disabled'}><b>환전</b></button>
+    </div>`;
+  } else {
+    const T = priv.trade;
+    if (T?.from === S.uid) {
+      body = `<div class="tr-wait">
+        <p>${esc(name(T.to))} 님의 답을 기다리는 중이에요 <span class="timer inline" data-deadline="${T.deadline}" data-total="${RULES.tradeMs}"><i></i><span></span></span></p>
+        <p class="soft small">내가 줄 것: ${tradeSide(T.give.cards.length, T.give.gold)} · 받을 것: ${tradeSide(T.ask.k, T.ask.gold, true)}</p>
+        <div class="grid">${T.give.cards.map(c => cardHTML(c.id, { act: '', size: 'sm' })).join('')}</div>
+        <button class="btn danger" data-act="trCancel" ${busy}>제안 취소</button>
+      </div>`;
+    } else {
+      const tr = S.tr;
+      const targets = p.order.filter(u => u !== S.uid && p.players[u].alive);
+      const cards = tr.cards.filter(u => hand.some(c => c.u === u));
+      const empty = !cards.length && !tr.gold && !tr.askGold && !tr.askK;
+      const why = !myTurn ? ''
+        : !tr.to ? '거래할 상대를 골라주세요'
+        : tr.gold > priv.gold ? '돈이 부족해요'
+        : priv.tradeN >= RULES.tradePerTurn ? `거래 제안은 한 턴에 ${RULES.tradePerTurn}번까지예요`
+        : p.trade ? '다른 거래가 진행 중이에요' : '';
+      body = `<div class="tr">
+        <div class="ex-row">${lbl('상대')}<div class="seg">${targets.map(u => `<button class="${tr.to === u ? 'on' : ''}" data-act="trTo" data-u="${u}">${esc(name(u))} <small class="mono">돈 ${p.players[u].gold ?? 0}</small></button>`).join('')}</div></div>
+        <h3>${lbl('GIVE')} 내가 줄 것 <small>손패에서 고르기 · 예약한 카드는 못 내놓아요</small></h3>
+        <div class="grid">${hand.map(c => `<div class="pick-wrap ${cards.includes(c.u) ? 'on' : ''}" data-act="trCard" data-u="${c.u}">${cardHTML(c.id, { act: '', size: 'sm', sel: cards.includes(c.u) })}</div>`).join('') || '<p class="soft">손패가 없어요.</p>'}</div>
+        <div class="ex-row">${lbl('돈')}${stepper('trNum', tr.gold, 'data-f="gold"')}</div>
+        <h3>${lbl('ASK')} 받을 것 <small>상대 손패는 안 보이니 카드는 장수만 정하고, 어떤 카드를 줄지는 상대가 골라요</small></h3>
+        <div class="ex-row">${lbl('카드')}${stepper('trNum', `${tr.askK}장`, 'data-f="askK"')}</div>
+        <div class="ex-row">${lbl('돈')}${stepper('trNum', tr.askGold, 'data-f="askGold"')}</div>
+        ${why ? `<p class="why small">${why}</p>` : `<p class="soft small">상대는 ${RULES.tradeMs / 1000}초 안에 수락하거나 거절해요. 내 턴이 끝나면 제안은 사라져요.</p>`}
+        <button class="btn primary cut" data-act="trSend" ${myTurn && !why && !empty ? busy : 'disabled'}><b>거래 제안</b></button>
+      </div>`;
+    }
+  }
+  const [tag, title] = { shop: ['SHOP', '상점'], exchange: ['EXCHANGE', '환전'], trade: ['TRADE', '거래'] }[kind];
+  return `<div class="modal"><div class="modal-box econ">
+    <div class="modal-head"><div class="stack">${lbl(tag, 'amber')}<h2>${title}</h2></div>${wallet}<button class="btn ghost" data-act="close">닫기</button></div>
+    <div class="modal-body">${note}${body}</div>
+  </div></div>`;
+}
+
+// 나에게 온 거래 제안. 답하거나 시간이 지날 때까지 떠 있다.
+function tradeOfferHTML(T) {
+  const priv = myPriv();
+  if (S.trPickN !== T.n) { S.trPickN = T.n; S.trPick = []; }
+  const hand = priv.hand;
+  const pick = S.trPick.filter(u => hand.some(c => c.u === u));
+  const why = pick.length !== T.ask.k ? `내줄 카드 ${T.ask.k}장을 골라주세요 (${pick.length}/${T.ask.k})`
+    : priv.gold < T.ask.gold ? '돈이 부족해서 수락할 수 없어요' : '';
+  return `<div class="modal"><div class="modal-box econ offer">
+    <div class="modal-head"><div class="stack">${lbl('TRADE OFFER', 'amber')}<h2>${esc(name(T.from))} 님의 거래 제안</h2></div><div class="timer inline" data-deadline="${T.deadline}" data-total="${RULES.tradeMs}"><i></i><span></span></div></div>
+    <div class="modal-body">
+      <h3>${lbl('GET')} 내가 받을 것 <small>${tradeSide(T.give.cards.length, T.give.gold)}</small></h3>
+      <div class="grid">${T.give.cards.map(c => cardHTML(c.id, { act: '', size: 'sm' })).join('')}${T.give.gold ? `<div class="gold-chip mono">돈 +${T.give.gold}</div>` : ''}${!T.give.cards.length && !T.give.gold ? '<p class="soft">없음</p>' : ''}</div>
+      <h3>${lbl('GIVE')} 내가 줄 것 <small>${tradeSide(T.ask.k, T.ask.gold)}${T.ask.k ? ' · 손패에서 고르기' : ''}</small></h3>
+      ${T.ask.k ? `<div class="grid">${hand.map(c => `<div class="pick-wrap ${pick.includes(c.u) ? 'on' : ''}" data-act="trPick" data-u="${c.u}">${cardHTML(c.id, { act: '', size: 'sm', sel: pick.includes(c.u) })}</div>`).join('')}</div>` : ''}
+      ${T.ask.gold ? `<div class="gold-chip mono">돈 -${T.ask.gold} <small>(가진 돈 ${priv.gold})</small></div>` : ''}
+      ${why ? `<p class="why small">${why}</p>` : ''}
+      <div class="ov-foot">
+        <button class="btn ghost" data-act="trDecline" ${S.pending ? 'disabled' : ''}>거절</button>
+        <button class="btn primary cut" data-act="trAccept" ${!why && !S.pending ? '' : 'disabled'}><b>수락</b></button>
+      </div>
+    </div>
+  </div></div>`;
+}
+
 let lastModal = '';
 function renderModal() {
   let html = '';
+  const offer = S.pub?.phase === 'battle' && myPriv()?.trade;
+  if (offer && offer.to === S.uid && S.modal !== 'editor') {
+    html = tradeOfferHTML(offer);
+    if (html !== lastModal) { $('#modal').innerHTML = html; lastModal = html; }
+    return;
+  }
   // 수정 창은 입력 중에 다시 그리면 커서가 사라지므로 열 때 한 번만 그린다
   if (S.modal === 'editor') {
     if (lastModal !== 'editor') { $('#modal').innerHTML = editorHTML(); lastModal = 'editor'; }
@@ -1311,6 +1497,8 @@ function renderModal() {
       </div></div></div>`;
   } else if (S.modal === 'host') {
     html = hostModalHTML();
+  } else if (S.modal === 'shop' || S.modal === 'exchange' || S.modal === 'trade') {
+    html = econModalHTML(S.modal);
   } else if (S.modal === 'deck') {
     const priv = myPriv();
     const deck = priv?.deck || [];
@@ -1356,8 +1544,9 @@ function spawnFx() {
       sfx.ko();
       shakePower = 20;
     } else {
-      const t = { heal: `+${f.v}`, block: `🛡+${f.v}`, nullify: '무효!', react: '반응 설치', strip: '방어도 파괴!', unreact: '반응 무력화!', trigger: `${f.v}!`, debuff: f.v, gimmick: f.v }[f.k];
-      if (t) V.text(x, y, t, `f-${f.k} ${f.kind ? `g-${f.kind}` : ''}`);
+      const t = { heal: `+${f.v}`, block: `🛡+${f.v}`, nullify: '무효!', react: '반응 설치', strip: '방어도 파괴!', unreact: '반응 무력화!', trigger: `${f.v}!`, debuff: f.v, gimmick: f.v,
+        roll: `${f.name || '낙원'} ${f.v > 0 ? `축복! +${f.amt || 5}` : `천벌! −${f.amt || 5}`}` }[f.k];
+      if (t) V.text(x, f.k === 'roll' ? y - 50 : y, t, `f-${f.k === 'roll' ? 'gimmick' : f.k} ${f.kind ? `g-${f.kind}` : ''}`);
       if (f.k === 'heal') { liveMotion.play(box, 'heal'); V.sparkle(x, y); }
       else if (f.k === 'block' || f.k === 'nullify') liveMotion.play(box, 'guard');
       else if (f.k === 'react' || f.k === 'trigger' || f.k === 'gimmick') liveMotion.play(box, 'cast');
@@ -1373,7 +1562,7 @@ function updateTimers() {
   for (const el of document.querySelectorAll('[data-deadline]')) {
     const left = Math.max(0, +el.dataset.deadline - now);
     (el.querySelector('.tv') || el.querySelector('span')).textContent = `${Math.ceil(left / 1000)}s`;
-    el.querySelector('i').style.width = `${Math.min(100, (left / total) * 100)}%`;
+    el.querySelector('i').style.width = `${Math.min(100, (left / (+el.dataset.total || total)) * 100)}%`;
     el.classList.toggle('urgent', left < 8000);
   }
 }

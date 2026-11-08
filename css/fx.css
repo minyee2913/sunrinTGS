@@ -652,3 +652,63 @@ body.aiming .fighter.locked .f-body { filter: drop-shadow(0 0 10px var(--red)); 
 .pillar { position: fixed; z-index: 44; pointer-events: none; mix-blend-mode: screen; filter: blur(1px);
   background: linear-gradient(180deg, transparent 0%, color-mix(in oklch, var(--c) 40%, transparent) 40%, var(--c) 85%, #fff 100%); box-shadow: 0 0 40px var(--c); }
 @media (prefers-reduced-motion: reduce) { .mcircle i { animation: none; } }
+
+/* ══ 낙원 동전 던지기 ══ */
+.fortune { position: fixed; z-index: 51; pointer-events: none; transform: translate(-50%, -100%); display: flex; flex-direction: column; align-items: center; gap: 6px; perspective: 400px; }
+.ft-name { font-family: var(--title); font-weight: 700; font-size: 13px; letter-spacing: .06em; color: #0b0d11; background: var(--amber); padding: 1px 12px; clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+.ft-coin { --c: var(--amber); width: 76px; aspect-ratio: 1; border-radius: 50%; display: grid; place-items: center; border: 4px solid #0b0d11;
+  background: radial-gradient(circle at 34% 28%, rgba(255,255,255,.55) 0 16%, transparent 42%), var(--c); box-shadow: 0 6px 0 #0b0d11, 0 0 28px var(--c); }
+.ft-coin.good { --c: var(--green); }
+.ft-coin.bad { --c: var(--red); }
+.ft-coin b { font-family: var(--mono-f); font-weight: 700; font-size: 30px; color: #fff; -webkit-text-stroke: 2px #0b0d11; paint-order: stroke fill; }
+.ft-res { font-style: normal; font-family: var(--title); font-weight: 700; font-size: 24px; min-height: 1.25em; color: #fff; text-shadow: 0 2px 0 #000, 0 0 14px var(--c, transparent); opacity: 0; }
+.fortune.done .ft-res { opacity: 1; animation: ft-res .36s cubic-bezier(.3,1.6,.5,1); }
+.fortune.good .ft-res { color: var(--green); --c: var(--green); }
+.fortune.bad .ft-res { color: var(--red); --c: var(--red); }
+@keyframes ft-res { from { opacity: 0; transform: scale(1.9); } }
+
+/* 전투 연출 중 체력바: 깎인 만큼 하얀 잔상이 남았다가 줄어든다 */
+.f-hp .f-hp-lost { position: absolute; top: 0; bottom: 0; background: #fff; transform-origin: left center; pointer-events: none; }
+
+/* ── 돈: 상점 · 환전 · 거래 ── */
+.bd.gold { background: color-mix(in oklch, var(--amber) 14%, transparent); color: var(--amber-hi); }
+.bd.trade { background: color-mix(in oklch, var(--cyan) 22%, transparent); color: var(--cyan); animation: pulse-dot 1.2s infinite; }
+@media (orientation: landscape) and (max-height: 520px) { .f-badges .bd.gold { display: inline-block; } }
+.gold-row { display: flex; align-items: baseline; gap: 8px; }
+.gold-row b { font-size: 20px; color: var(--amber-hi); line-height: 1; }
+.econ-btns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.econ-btns .tg { min-width: 0; letter-spacing: 0; font-family: inherit; font-weight: 700; font-size: 13px; }
+.modal-box.econ { width: min(860px, 100%); }
+.wallet { display: flex; align-items: baseline; gap: 6px 10px; flex-wrap: wrap; margin-left: auto; }
+.wallet b { font-size: 18px; margin-right: 6px; }
+.wallet b.gold { color: var(--amber-hi); }
+.econ .why { color: var(--red); font-weight: 700; }
+.shop-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+.shop-item { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
+.shop-item .btn { height: 36px; padding: 0 10px; font-size: 14px; }
+.ex, .tr, .tr-wait { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+.ex-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ex-row > .lbl { min-width: 44px; }
+.seg { display: flex; flex-wrap: wrap; gap: 1px; background: var(--line); }
+.seg button { height: 38px; padding: 0 16px; border: 0; background: var(--panel2); color: var(--soft); font-weight: 700; font-size: 14px; }
+.seg button small { color: var(--dim); margin-left: 4px; }
+.seg button.on { background: var(--amber); color: #0b0d11; }
+.seg button.on small { color: #0b0d11; }
+.stepper { display: inline-flex; align-items: center; gap: 8px; }
+.stepper b { min-width: 48px; text-align: center; font-size: 18px; }
+.ex-preview { display: flex; align-items: center; gap: 14px; padding: 10px 16px; background: var(--panel); font-size: 18px; }
+.ex-preview .mono { color: var(--amber); }
+.pick-wrap { cursor: pointer; }
+.pick-wrap.on .card { box-shadow: inset 0 0 0 3px var(--amber); }
+.gold-chip { align-self: center; padding: 8px 14px; background: color-mix(in oklch, var(--amber) 16%, transparent); color: var(--amber-hi); font-size: 18px; font-weight: 700; }
+.gold-chip small { color: var(--soft); font-size: 12px; }
+.timer.inline { display: inline-block; width: 120px; vertical-align: middle; }
+.modal-box.offer { border-top: 3px solid var(--cyan); }
+.modal-box.offer .ov-foot { margin-top: 16px; }
+@media (orientation: portrait) and (max-width: 760px) {
+  .dock { grid-template-areas: 'e t s' 'c c c' 'u n n' 'h h h'; }
+  .econ-btns { grid-area: c; }
+  .gold-row b { font-size: 14px; }
+  .econ-btns .tg { height: 30px; }
+  .wallet { margin-left: 0; order: 3; width: 100%; }
+}

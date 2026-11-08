@@ -119,6 +119,17 @@ export const sfx = {
     if (!ok()) return;
     tone({ f: 400, f2: 140, type: 'sawtooth', dur: .35, vol: .1 });
   },
+  // 낙원 동전이 한 번 뒤집힐 때
+  flip(hi = false) {
+    if (!ok()) return;
+    tone({ f: hi ? 1320 : 990, f2: hi ? 1100 : 820, type: 'triangle', dur: .05, vol: .08 });
+  },
+  // 낙원 결과: 좋으면 밝게 올라가고, 나쁘면 낮게 떨어진다
+  luck(good) {
+    if (!ok()) return;
+    if (good) [784, 988, 1175, 1568].forEach((f, i) => tone({ f, type: 'triangle', dur: .22, vol: .14, t: i * .055 }));
+    else { tone({ f: 330, f2: 110, type: 'sawtooth', dur: .45, vol: .14 }); tone({ f: 233, f2: 82, type: 'square', dur: .5, vol: .07, t: .04 }); }
+  },
   dash() {
     if (!ok()) return;
     noise({ dur: .16, vol: .18, f: 800, f2: 3000, q: 2 });

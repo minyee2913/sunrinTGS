@@ -31,4 +31,13 @@ export const RULES = {
   replayBaseMs: 1000, // 턴 종료 전투 연출: 기본 시간 + 카드 1장당 시간, 최대 시간 (넘으면 빨라진다)
   replayPerMs: 1900,
   replayMaxMs: 13000,
+  // 돈
+  startGold: 10,
+  exRate: { hp: 1, gold: 1, en: 3 }, // 환전 가치: 에너지 1 = 체력 3 = 돈 3
+  exEnergyMax: 3,     // 한 턴에 환전으로 얻을 수 있는 에너지
+  shopSize: 4,        // 상점에 놓이는 카드 수 (라운드마다 새로 채운다)
+  price: { common: 4, rare: 7, epic: 12, legend: 20 },
+  sellRate: 0.5,      // 팔 때는 산 값의 절반 (내림, 최소 1)
+  tradeMs: 20000,     // 거래 제안에 답할 시간
+  tradePerTurn: 3,    // 한 턴에 할 수 있는 거래 제안 수
 };

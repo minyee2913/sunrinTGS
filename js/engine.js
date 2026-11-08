@@ -5,9 +5,11 @@
 //   예약 중 내 손패·에너지는 상대 반응을 무시한 가상 진행(provisional)으로 보여준다.
 //   반응 결과를 미리 보고 되돌리는 일을 막기 위해서다.
 //   턴 종료(commitTurn) 때 예약한 카드를 반응까지 포함해 실제로 처리한다.
+//   단, 환전·상점·거래는 예약하지 않고 바로 G에 적용한다 (되돌릴 수 없다).
 import { CARDS, STARTER, REWARD_POOL, CURSE, RARITY } from './cards.js';
 import { GIMMICKS, CHANGE_CHANCE } from './gimmicks.js';
 import { RULES } from './config.js';
+import { EX_NAMES, exRate, buyPrice, sellPrice } from './economy.js';
 
 // ── 난수 (mulberry32, 상태를 G.rng에 보관) ──
 function rand(G) {
@@ -58,6 +60,8 @@ export function replayMs(plays) {
 
 function sealReplay(G) {
   if (G.replay?.turnNo === G.turnNo) return;
+  // 턴 시작 효과(낙원으로 쓰러짐 등)만 담긴, 아직 나가지 않은 연출을 빈 연출로 덮어쓰지 않는다
+  if (G.replay && G.delayUsed !== G.replay.n && !G.turnPlays.length) return;
   G.replay = { n: ++G.replaySeq, turnNo: G.turnNo, by: G.cur, plays: G.turnPlays };
 }
 
@@ -99,6 +103,7 @@ export function createGame({ gameId, players, seed, now }) {
       draw: [], hand: [], discard: [],
       react: null, drawBonus: 0, enPen: 0, enBonus: 0, enCap: 0, keepBlock: false, st: {}, clean: true,
       atkSince: [], atkRecent: [], plays: {}, atkCount: 0, out: null,
+      gold: RULES.startGold, shop: [], exEn: 0, tradeN: 0,
       stats: { dealt: 0, taken: 0, self: 0, maxHit: 0, healed: 0, cards: 0, blocked: 0, kills: 0 },
     };
   }
@@ -106,6 +111,7 @@ export function createGame({ gameId, players, seed, now }) {
     p.draw = deckShuffle(p, STARTER.map(id => mk(G, id)));
     draw(G, p, RULES.drawPerTurn);
   }
+  rollShop(G);
   log(G, `게임 시작! 선공은 ${P(G, G.order[0]).name}`, 'sys');
   nextTurn(G, now);
   return G;
@@ -122,17 +128,18 @@ function nextTurn(G, now) {
 
 function beginTurn(G, uid, now) {
   const p = P(G, uid);
-  // 턴 시작 기믹 효과는 직전 턴 연출 끝에 붙인다 (이미 재생된 연출이면 새 연출로)
-  const fresh = G.replay && G.replay.turnNo === G.turnNo && G.delayUsed !== G.replay.n;
+  // 턴 시작 기믹 효과는 직전 턴 연출 끝에 붙인다 (이미 재생된 연출이면 새 연출로).
+  // 아직 제한 시간에 연출 시간을 더하지 않은 연출 = 아직 클라이언트에 나가지 않은 연출
+  // (낙원으로 쓰러져 다음 사람 턴으로 바로 넘어가는 경우에도 이어 붙는다)
+  const fresh = G.replay && G.delayUsed !== G.replay.n;
   const startGrp = { k: 'start', by: uid, id: null, tg: [], fx: [] };
-  G.grp = startGrp;
   const oldTurn = G.turnNo;
   G.turnNo++;
   G.cur = uid;
   G.phase = 'battle';
   G.turnPlays = [];
-  G.grp = null;
   G.plan = { acts: [] };
+  G.grp = startGrp; // 턴 시작 효과(낙원 등)를 연출에 담는다
   if (p.keepBlock) p.keepBlock = false;
   else p.block = 0;
   if (p.react) {
@@ -148,6 +155,8 @@ function beginTurn(G, uid, now) {
   p.plays = {};
   p.atkCount = 0;
   p.drawBonus = 0;
+  p.exEn = 0;
+  p.tradeN = 0;
   turnStartGimmicks(G, p);
   // 꼼짝 마!: 이번 턴 에너지 최대치 고정 (AI로 얻은 에너지까지 포함해서)
   if (p.enCap) {
@@ -222,11 +231,14 @@ function chainGimmicks(G, p) {
 function turnStartGimmicks(G, p) {
   const st = p.st;
   if (st.paradise) {
-    if (rand(G) < .5) {
+    const good = rand(G) < .5;
+    // 동전 던지기 연출: 결과(good)를 먼저 알리고, 이어서 회복/피해를 보여준다
+    fx(G, p.uid, 'roll', good ? 1 : -1, { g: st.hush ? null : 'paradise', name: st.hush ? '기믹 ?' : gname('paradise'), amt: 5, kind: 'mixed' });
+    if (good) {
       const got = Math.min(5, p.maxHp - p.hp);
       p.hp += got;
       fx(G, p.uid, 'heal', got, { h: p.hp });
-      log(G, `${p.name}의 ${gname('paradise')}: 체력 +5`);
+      log(G, `${p.name}의 ${gname('paradise')}: 체력 +${got}`);
     } else {
       log(G, `${p.name}의 ${gname('paradise')}: 체력 -5`);
       hurt(G, p, 5, { pierce: true });
@@ -254,6 +266,7 @@ function turnStartGimmicks(G, p) {
   }
   const fresh = p.stNew || {};
   for (const id of Object.keys(st)) {
+    if (GIMMICKS[id].keep) continue; // 예?·엄·티~원은 줄지 않는다
     if ((fresh[id] || 0) >= st[id]) continue; // 전부 지난 내 턴 뒤에 받은 중첩이면 이번에는 줄지 않는다
     st[id]--;
     if (st[id] <= 0) delete st[id];
@@ -265,6 +278,7 @@ export function endTurn(G, uid, now, reason = '') {
   if (G.phase !== 'battle' || G.cur !== uid) return '내 턴이 아니에요';
   const p = P(G, uid);
   if (reason === 'timeout') log(G, `${p.name}의 시간 초과`);
+  if (G.trade) closeTrade(G, '턴이 끝나 거래 제안이 사라졌다');
   // 이 턴에 몰래 쓴 회방 카드가 마지막에 한꺼번에 발동한다
   resolveAmbush(G);
   if (G.phase !== 'battle') return null;
@@ -341,6 +355,14 @@ function kill(G, p, src) {
   if (src && src !== p) src.stats.kills++;
   fx(G, p.uid, 'ko', 0);
   log(G, `💀 ${p.name} 탈락!`, 'out');
+  // 쓰러뜨린 사람이 돈을 모두 가져간다
+  if (src && src !== p && src.alive && p.gold > 0) {
+    src.gold += p.gold;
+    fx(G, src.uid, 'gimmick', `돈 +${p.gold}`, { kind: 'buff' });
+    log(G, `${src.name}, ${p.name}의 돈 ${p.gold} 획득`);
+    p.gold = 0;
+  }
+  if (G.trade && (G.trade.from === p.uid || G.trade.to === p.uid)) closeTrade(G, '탈락으로 거래 제안이 사라졌다');
 }
 
 // 공격 → 방어·반응 판정 → 최종 피해 → 반격 부가 효과. 반격 피해는 다시 반응을 일으키지 않는다.
@@ -502,7 +524,7 @@ function healP(G, p, n) {
   const got = Math.max(0, Math.min(p.maxHp - p.hp, amt));
   p.hp += got;
   p.stats.healed += got;
-  fx(G, p.uid, 'heal', got);
+  fx(G, p.uid, 'heal', got, { h: p.hp });
   return got;
 }
 
@@ -520,6 +542,7 @@ export function playCard(G, uid, cardU, targetUid, now) {
   const p = P(G, uid);
   const i = p.hand.findIndex(c => c.u === cardU);
   if (i < 0) return '손패에 없는 카드예요';
+  if (inTrade(G, uid, cardU)) return '거래에 내놓은 카드예요';
   const inst = p.hand[i];
   const card = CARDS[inst.id];
   if (p.energy < card.cost) return '에너지가 부족해요';
@@ -664,6 +687,154 @@ export function commitTurn(G, uid, now, reason = '') {
   return null;
 }
 
+// ── 돈: 환전 · 상점 · 거래 ──
+// 모두 내 턴에 바로 적용되고 되돌릴 수 없다. 예약한 카드는 그대로 둔다.
+function rollShop(G) {
+  for (const u of alive(G)) P(G, u).shop = rewardOpts(G, RULES.shopSize);
+}
+
+function econTurn(G, uid) {
+  if (G.phase !== 'battle' || G.cur !== uid) return '내 턴에만 할 수 있어요';
+  if (!P(G, uid)?.alive) return '탈락해서 할 수 없어요';
+  return null;
+}
+const planned = (G, u) => !!G.plan?.acts.some(a => a.card === u);
+const inTrade = (G, uid, u) => G.trade?.from === uid && G.trade.give.cards.some(c => c.u === u);
+const int = v => Math.max(0, Math.floor(+v || 0));
+
+// 예약한 카드가 지금 상태에서도 모두 실행되는지 (환전으로 에너지를 빼거나 체력을 줄인 뒤)
+function planStillWorks(G, uid) {
+  const S = clone(G);
+  S.noReact = true;
+  return G.plan.acts.every(a => !playCard(S, uid, a.card, a.target, 0));
+}
+
+// 환전: from을 k묶음 주고 to를 받는다 (비율은 economy.js의 exRate)
+export function exchange(G, uid, from, to, k) {
+  const err = econTurn(G, uid);
+  if (err) return err;
+  k = int(k);
+  if (!EX_NAMES[from] || !EX_NAMES[to] || from === to || k < 1 || k > 99) return '환전할 양을 다시 정해주세요';
+  const p = P(G, uid);
+  const r = exRate(from, to);
+  const give = r.give * k, get = r.get * k;
+  if (from === 'hp' && p.hp - give < 1) return '체력이 1보다 적어지게 환전할 수는 없어요';
+  if (from === 'gold' && p.gold < give) return '돈이 부족해요';
+  if (from === 'en' && provisional(G).players[uid].energy < give) return '남은 에너지가 부족해요';
+  if (to === 'hp' && p.hp + get > p.maxHp) return `체력은 최대 ${p.maxHp}까지예요`;
+  if (to === 'en' && p.exEn + get > RULES.exEnergyMax) return `환전으로 얻는 에너지는 한 턴에 ${RULES.exEnergyMax}까지예요`;
+  const key = { hp: 'hp', en: 'energy', gold: 'gold' };
+  const apply = s => {
+    p[key[from]] -= s * give;
+    p[key[to]] += s * get;
+    if (to === 'en') p.exEn += s * get;
+  };
+  apply(1);
+  if (!planStillWorks(G, uid)) { apply(-1); return '예약한 카드를 쓸 수 없게 돼요'; }
+  fx(G, uid, 'gimmick', `${EX_NAMES[from]} -${give} → ${EX_NAMES[to]} +${get}`, { kind: 'mixed' });
+  log(G, `${p.name} 환전: ${EX_NAMES[from]} ${give} → ${EX_NAMES[to]} ${get}`);
+  return null;
+}
+
+// 상점에서 산 카드는 바로 손으로 온다 (이번 턴에 쓸 수 있다). 손이 꽉 찼으면 버린 더미로.
+export function buyCard(G, uid, id) {
+  const err = econTurn(G, uid);
+  if (err) return err;
+  const p = P(G, uid);
+  const i = p.shop.indexOf(id);
+  if (i < 0) return '상점에 없는 카드예요';
+  const cost = buyPrice(id);
+  if (p.gold < cost) return '돈이 부족해요';
+  p.gold -= cost;
+  p.shop.splice(i, 1);
+  addCards(G, p, id, 1, 'hand');
+  fx(G, uid, 'gimmick', `돈 -${cost}`, { kind: 'mixed' });
+  log(G, `${p.name}, 상점에서 카드 1장 구매 (돈 ${cost})`);
+  return null;
+}
+
+export function sellCard(G, uid, cardU) {
+  const err = econTurn(G, uid);
+  if (err) return err;
+  const p = P(G, uid);
+  const i = p.hand.findIndex(c => c.u === cardU);
+  if (i < 0) return '손패에 없는 카드예요';
+  if (planned(G, cardU)) return '예약한 카드는 팔 수 없어요';
+  if (inTrade(G, uid, cardU)) return '거래에 내놓은 카드는 팔 수 없어요';
+  const id = p.hand[i].id;
+  if (CARDS[id].curse) return '방해 카드는 팔 수 없어요';
+  if (deckOf(p).length <= RULES.minDeck) return `덱은 ${RULES.minDeck}장보다 적어질 수 없어요`;
+  const got = sellPrice(id);
+  p.hand.splice(i, 1);
+  p.gold += got;
+  fx(G, uid, 'gimmick', `돈 +${got}`, { kind: 'buff' });
+  log(G, `${p.name}, 카드 1장 판매 (돈 +${got})`);
+  return null;
+}
+
+// 거래 제안: 내 카드·돈 ↔ 상대 돈 + 상대가 고른 카드 k장. 상대가 시간 안에 수락하면 바로 맞바꾼다.
+export function proposeTrade(G, uid, x, now) {
+  const err = econTurn(G, uid);
+  if (err) return err;
+  if (G.trade) return '이미 답을 기다리는 거래가 있어요';
+  const p = P(G, uid);
+  const t = P(G, x?.to);
+  if (!t || !t.alive || t === p) return '거래할 상대를 골라주세요';
+  if (p.tradeN >= RULES.tradePerTurn) return `거래 제안은 한 턴에 ${RULES.tradePerTurn}번까지예요`;
+  const give = [];
+  for (const u of new Set(Object.values(x.cards || {}))) {
+    const c = p.hand.find(c => c.u === u);
+    if (!c) return '손패에 없는 카드예요';
+    if (planned(G, u)) return '예약한 카드는 거래에 내놓을 수 없어요';
+    give.push({ u, id: c.id });
+  }
+  const gold = int(x.gold), askGold = int(x.askGold), askK = int(x.askK);
+  if (gold > p.gold) return '돈이 부족해요';
+  if (askK > RULES.handMax) return '받을 카드 수를 다시 정해주세요';
+  if (!give.length && !gold && !askGold && !askK) return '주고받을 것을 정해주세요';
+  p.tradeN++;
+  G.trade = { n: (G.tradeSeq = (G.tradeSeq || 0) + 1), from: uid, to: t.uid, give: { cards: give, gold }, ask: { gold: askGold, k: askK }, deadline: now + RULES.tradeMs };
+  log(G, `${p.name} → ${t.name} 거래 제안`, 'sys');
+  return null;
+}
+
+function closeTrade(G, msg) {
+  G.trade = null;
+  log(G, msg);
+}
+
+export function cancelTrade(G, uid) {
+  if (G.trade?.from !== uid) return '취소할 거래가 없어요';
+  closeTrade(G, `${P(G, uid).name}, 거래 제안 취소`);
+  return null;
+}
+
+export function replyTrade(G, uid, x) {
+  const T = G.trade;
+  if (!T || T.to !== uid || x?.n !== T.n) return '이미 끝난 거래예요';
+  const p = P(G, T.from), t = P(G, uid);
+  if (!x.accept) { closeTrade(G, `${t.name}, 거래 거절`); return null; }
+  const pick = [...new Set(Object.values(x.cards || {}))];
+  if (pick.length !== T.ask.k) return `줄 카드 ${T.ask.k}장을 골라주세요`;
+  const theirs = pick.map(u => t.hand.find(c => c.u === u));
+  if (theirs.some(c => !c)) return '손패에 없는 카드예요';
+  if (t.gold < T.ask.gold) return '돈이 부족해요';
+  const mine = T.give.cards.map(g => p.hand.find(c => c.u === g.u));
+  if (p.gold < T.give.gold || mine.some(c => !c)) { closeTrade(G, '제안한 사람이 내놓은 것을 더 이상 갖고 있지 않아 거래가 취소됐다'); return null; }
+  p.hand = p.hand.filter(c => !mine.includes(c));
+  t.hand = t.hand.filter(c => !theirs.includes(c));
+  for (const c of theirs) (p.hand.length < RULES.handMax ? p.hand : p.discard).push(c);
+  for (const c of mine) (t.hand.length < RULES.handMax ? t.hand : t.discard).push(c);
+  p.gold += T.ask.gold - T.give.gold;
+  t.gold += T.give.gold - T.ask.gold;
+  G.trade = null;
+  const side = (n, g) => [n && `카드 ${n}장`, g && `돈 ${g}`].filter(Boolean).join(' + ') || '없음';
+  fx(G, p.uid, 'gimmick', '거래 성사!', { kind: 'buff' });
+  fx(G, t.uid, 'gimmick', '거래 성사!', { kind: 'buff' });
+  log(G, `🤝 거래 성사: ${p.name}(${side(mine.length, T.give.gold)}) ↔ ${t.name}(${side(theirs.length, T.ask.gold)})`, 'sys');
+  return null;
+}
+
 // ── 라운드 종료와 덱 성장 ──
 function endRound(G, now) {
   if (G.round >= RULES.suddenRound) {
@@ -690,7 +861,8 @@ export function pickCard(G, uid, cardId, now) {
   const s = G.phase === 'pick' && G.pick?.[uid];
   if (!s || s.done) return '지금은 카드를 고를 수 없어요';
   if (cardId && !s.opts.includes(cardId)) return '제시된 카드가 아니에요';
-  if (cardId) P(G, uid).discard.push(mk(G, cardId));
+  // 고른 카드는 바로 손으로 온다 (손패 상한과 상관없이)
+  if (cardId) P(G, uid).hand.push(mk(G, cardId));
   s.done = true;
   s.chose = cardId || null;
   if (Object.values(G.pick).every(x => x.done)) afterPick(G, now);
@@ -731,6 +903,7 @@ function finishRound(G, now) {
   G.pick = null;
   G.round++;
   G.turnIdx = -1;
+  rollShop(G);
   log(G, `── ${G.round}라운드 시작 ──`, 'sys');
   if (G.round === RULES.suddenRound) log(G, '⚠️ 이번 라운드부터 회복량 절반, 라운드 종료 피해 시작', 'sys');
   nextTurn(G, now);
@@ -751,7 +924,12 @@ function checkWin(G) {
 
 // 시간 초과 처리. 상태가 바뀌었으면 true.
 export function tick(G, now) {
-  if (now < G.deadline) return false;
+  let changed = false;
+  if (G.trade && now >= G.trade.deadline) {
+    closeTrade(G, `${P(G, G.trade.to).name}, 거래에 답하지 않음`);
+    changed = true;
+  }
+  if (now < G.deadline) return changed;
   if (G.phase === 'battle') {
     commitTurn(G, G.cur, now, 'timeout');
     return true;
@@ -762,7 +940,7 @@ export function tick(G, now) {
     else finishRound(G, now);
     return true;
   }
-  return false;
+  return changed;
 }
 
 const deckOf = p => [...p.draw, ...p.discard, ...p.hand, ...(p.ambushQ || [])];
@@ -777,6 +955,7 @@ export function publicView(G) {
       react: !!p.react, hand: p.hand.length + (p.ambushQ?.length || 0), draw: p.draw.length, discard: p.discard.length,
       char: p.char, deck: deckOf(p).length, enPen: p.enPen, enBonus: p.enBonus || 0, enCap: p.enCap || 0,
       st: p.st.hush ? { hush: p.st.hush } : p.st, stHidden: !!p.st.hush, keepBlock: p.keepBlock, out: p.out, stats: p.stats,
+      gold: p.gold || 0,
     };
   }
   const sudden = G.round >= RULES.suddenRound;
@@ -787,6 +966,8 @@ export function publicView(G) {
     plan: G.plan?.acts.length ? { by: G.cur, n: G.plan.acts.length } : null,
     pick: G.pick ? Object.fromEntries(Object.entries(G.pick).map(([u, s]) => [u, s.done])) : null,
     suddenDmg: sudden ? RULES.suddenBase + (G.round - RULES.suddenRound) : null,
+    // 거래 제안은 누가 누구에게 하는지와 양만 공개한다. 카드 내용은 두 사람에게만.
+    trade: G.trade ? { n: G.trade.n, from: G.trade.from, to: G.trade.to, cards: G.trade.give.cards.length, gold: G.trade.give.gold, askGold: G.trade.ask.gold, askK: G.trade.ask.k, deadline: G.trade.deadline } : null,
   };
 }
 
@@ -809,6 +990,11 @@ export function privateView(G, uid, prov = G) {
     deck: deckOf(p).sort(byCard),
     pick: s ? { stage: G.phase, opts: s.opts || null, done: s.done } : null,
     ack: G.ack[uid] || null,
+    gold: G.players[uid].gold || 0,
+    shop: G.players[uid].shop || [],
+    exEn: G.players[uid].exEn || 0,
+    tradeN: G.players[uid].tradeN || 0,
+    trade: G.trade && (G.trade.from === uid || G.trade.to === uid) ? G.trade : null,
   };
 }
 
@@ -821,13 +1007,19 @@ export function handleRequest(G, uid, reqId, r, now) {
   if (done.length > 20) done.shift();
 
   let err = null;
-  if (['play', 'undo', 'end'].includes(r.type) && r.turnNo !== G.turnNo) err = '이미 지나간 턴의 요청이에요';
+  if (['play', 'undo', 'end', 'exchange', 'buy', 'sell', 'trade', 'tradeCancel'].includes(r.type) && r.turnNo !== G.turnNo) err = '이미 지나간 턴의 요청이에요';
   else if (r.type === 'play') err = planPlay(G, uid, r.card, r.target, now);
   else if (r.type === 'undo') err = undoPlan(G, uid);
   else if (r.type === 'end') err = commitTurn(G, uid, now);
   else if (r.type === 'ambush') err = r.turnNo !== G.turnNo ? '이미 지나간 턴이에요' : playAmbush(G, uid, r.card);
   else if (r.type === 'pick') err = pickCard(G, uid, r.card || null, now);
   else if (r.type === 'remove') err = removeCard(G, uid, r.card || null, now);
+  else if (r.type === 'exchange') err = exchange(G, uid, r.x?.from, r.x?.to, r.x?.k);
+  else if (r.type === 'buy') err = buyCard(G, uid, r.card);
+  else if (r.type === 'sell') err = sellCard(G, uid, r.card);
+  else if (r.type === 'trade') err = proposeTrade(G, uid, r.x || {}, now);
+  else if (r.type === 'tradeCancel') err = cancelTrade(G, uid);
+  else if (r.type === 'tradeReply') err = replyTrade(G, uid, r.x || {});
   else err = '알 수 없는 요청';
   G.ack[uid] = { id: reqId, err };
   return true;

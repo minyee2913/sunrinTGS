@@ -12,7 +12,7 @@ import { sfx } from './sfx.js';
 import { createMotion } from './motion.js';
 
 const AMBUSH_MS = 950; // 회방! 등장
-const STEP = { dmg: 440, ko: 1600, comeback: 620, trigger: 440, block: 300, heal: 340, react: 320, nullify: 280, strip: 280, unreact: 280, debuff: 280, gimmick: 300 };
+const STEP = { dmg: 440, ko: 1600, comeback: 620, trigger: 440, block: 300, heal: 340, react: 320, nullify: 280, strip: 280, unreact: 280, debuff: 280, gimmick: 300, roll: 1500 };
 const CARD_MS = 1050; // 카드 컷인 시간
 const CRIT = 10;      // 이 피해부터 치명타 연출
 const TOTAL_MS = 750; // 마지막 턴 합계
@@ -77,13 +77,32 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
     const r = (el.querySelector('.f-body') || el).getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height * .45, r };
   };
+  // 체력바·체력 숫자를 맞는 순간 바로 바꾼다. 깎인 부분은 하얀 잔상으로 잠깐 남기고, 회복은 번쩍인다.
   const setHp = (u, h) => {
     const el = F(u);
     if (!el) return;
     const max = players[u]?.maxHp || 40;
-    el.querySelector('.f-hp i').style.width = `${Math.max(0, (h / max) * 100)}%`;
-    el.querySelector('.f-hp span').textContent = `${Math.max(0, h)}/${max}`;
-    el.querySelector('.f-hp').classList.toggle('low', h / max <= .3);
+    const v = Math.max(0, h), pct = Math.min(100, (v / max) * 100);
+    const box = el.querySelector('.f-hp'), bar = el.querySelector('.f-hp i');
+    const prev = parseFloat(bar.style.width);
+    bar.style.transition = 'none';
+    bar.style.width = `${pct}%`;
+    el.querySelector('.f-hp span').textContent = `${v}/${max}`;
+    const num = el.querySelector('.f-num');
+    if (num) num.innerHTML = `${v}<span class="dim">/${max}</span>`;
+    box.classList.toggle('low', v / max <= .3);
+    if (reduced() || !(prev >= 0)) return;
+    if (prev > pct && box.appendChild) {
+      const lost = document.createElement('div');
+      lost.className = 'f-hp-lost';
+      Object.assign(lost.style, { left: `${pct}%`, width: `${prev - pct}%` });
+      box.appendChild(lost);
+      lost.animate([{ transform: 'scaleX(1)', opacity: 1 }, { transform: 'scaleX(1)', opacity: 1, offset: .35 }, { transform: 'scaleX(0)', opacity: .6 }],
+        { duration: 650, easing: 'ease-in' }).onfinish = () => lost.remove();
+    } else if (prev < pct) {
+      bar.animate?.([{ filter: 'brightness(2.2)' }, { filter: 'none' }], { duration: 500, easing: 'ease-out' });
+    }
+    num?.animate?.([{ transform: 'scale(1.35)' }, { transform: 'scale(1)' }], { duration: 260, easing: 'ease-out' });
   };
   const moveTo = (el, x, y, ms, easing = 'ease-out') => {
     if (stopped) return Promise.resolve();
@@ -371,7 +390,7 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
           V.pillar(x, center(el).r.bottom, center(el).r.width * .7, { ms: 800 * speed + 200 });
           V.sparkle(x, y, { n: 26, spread: 70 });
           V.ring(x, y + 30, { color: '#6ef0a0', r0: 10, r1: 90, w: 6, life: 600 });
-          V.text(x, y - 50, `+${f.v}`, 'f-heal');
+          V.text(x, y - 50, f.v > 0 ? `+${f.v}` : '체력 가득', 'f-heal');
           if (f.h != null) setHp(f.u, f.h);
           sfx.heal();
           await wait(STEP.heal);
@@ -425,6 +444,32 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
           sfx.debuff();
           await wait(STEP.debuff);
           break;
+        case 'roll': {
+          // 낙원: 머리 위에서 동전(+5 / −5)이 뒤집히다 멈춘다. 이어지는 회복/피해 효과가 결과를 보여준다.
+          const good = f.v > 0;
+          await camTo({ x, y }, 1.22, 200);
+          if (stopped) return;
+          const c = center(el);
+          motion.play(el, 'cast');
+          V.magicCircle(c.x, c.r.bottom - 6, c.r.width * 1.4, { color: '#ffd23f', ms: STEP.roll * speed + 300 });
+          await V.fortune(c.x, c.r.top - 8, {
+            good, name: f.name || '낙원', amt: f.amt || 5,
+            spin: STEP.roll * .55 * speed + 250, hold: STEP.roll * .4 * speed + 500, onFlip: sfx.flip,
+          });
+          if (stopped) return;
+          sfx.luck(good);
+          if (good) {
+            V.flash('rgba(110,240,160,.28)', 260);
+            V.rays(c.x, c.y, { n: 30, colors: ['#6ef0a0', '#fff'], r1: 40, life: 420 });
+            V.sparkle(c.x, c.r.top, { n: 22, spread: 80 });
+          } else {
+            V.flash('rgba(255,59,92,.3)', 260);
+            V.puff(c.x, c.r.top + 10, { color: 'rgba(60,20,40,.7)', n: 12 });
+            V.shake(shakeEl, 8, 260);
+          }
+          await wait(STEP.roll * .2);
+          break;
+        }
         case 'gimmick': {
           motion.play(el, f.kind === 'debuff' ? 'hit' : 'cast', { power: .1 });
           const col = { buff: ['#7fd6ff', '#e6f6ff'], debuff: ['#ff7a7a', '#ffd0d0'], mixed: ['#ffd23f', '#fff3c2'] }[f.kind] || ['#fff'];

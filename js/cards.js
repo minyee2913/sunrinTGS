@@ -14,7 +14,7 @@ export const CURSE = 'p79';
 export const CARDS = {
   // ── 기본 카드 ──
   p01: { name: '원, 투!', cost: 1, type: 'atk', scope: 'one', basic: true,
-    text: '피해 6. 치녀 1을 얻는다.', play: c => { c.attack(c.target, 6); c.gain('str', 1); } },
+    text: '피해 4. 치녀 1을 얻는다.', play: c => { c.attack(c.target, 4); c.gain('str', 1); } },
   p17: { name: '철벽팔뚝', cost: 1, type: 'def', scope: 'self', basic: true,
     text: '방어도 7. 요이 1을 얻는다.', play: c => { c.block(7); c.gain('dex', 1); } },
   p85: { name: '머리굴리는중', cost: 0, type: 'skill', scope: 'self', basic: true, limit: 1,
@@ -75,7 +75,7 @@ export const CARDS = {
     text: '모든 상대에게 피해 5, 예? 1.', play: c => c.others().forEach(t => { c.attack(t, 5); c.give(t, 'ye', 1); }) },
   p12: { name: '단체필살기', cost: 3, type: 'atk', scope: 'others', tag: '폭탄',
     text: '모든 상대에게 피해 9, 성능평가 1.', play: c => c.others().forEach(t => { c.attack(t, 9); c.give(t, 'weak', 1); }) },
-  p13: { name: '마이크공격', cost: 1, type: 'atk', scope: 'others', tag: '폭탄',
+  p13: { name: '마이크공격', cost: 2, type: 'atk', scope: 'others', tag: '폭탄',
     text: '모든 상대에게 피해 3, 성능평가 1.', play: c => c.others().forEach(t => { c.attack(t, 3); c.give(t, 'weak', 1); }) },
   p44: { name: '전부날아가', cost: 2, type: 'atk', scope: 'others', tag: '폭탄',
     text: '모든 상대의 방어도를 없앤 뒤 피해 4, 성능평가 1.', play: c => c.others().forEach(t => { c.stripBlock(t); c.attack(t, 4); c.give(t, 'weak', 1); }) },
@@ -343,7 +343,7 @@ export const CARDS = {
 };
 
 // 기본 카드: 시작 덱에 들어가고 라운드 보상으로는 나오지 않는다
-const BASIC = ['p01', 'p17', 'p85', 'p04', 'p06', 'p13', 'p20', 'p31', 'p58'];
+const BASIC = ['p01', 'p17', 'p85', 'p06', 'p20', 'p31', 'p58'];
 for (const id of BASIC) CARDS[id].basic = true;
 
 for (const [id, c] of Object.entries(CARDS)) {
@@ -376,9 +376,9 @@ for (const c of Object.values(CARDS)) {
   c.rarity = LEGEND.includes(c.id) ? 'legend' : EPIC.includes(c.id) ? 'epic' : c.cost >= 2 && !c.basic ? 'rare' : 'common';
 }
 
-// 시작 덱 12장: 공격 6, 방어 3, 반응 1, 회복 1, 카드 뽑기 1
+// 시작 덱 10장: 공격 4, 방어 3, 반응 1, 회복 1, 카드 뽑기 1
 export const STARTER = [
-  'p01', 'p01', 'p01', 'p04', 'p06', 'p13', // 주먹부터 3, 눈덩이투척, 복도돌진, 마이크공격
+  'p01', 'p01', 'p01', 'p06',               // 주먹부터 3, 복도돌진
   'p17', 'p17', 'p20', 'p58',               // 철벽팔뚝 2, 책상엄폐, 옆으로쏙
   'p31', 'p85',                             // 국물한입, 머리굴리는중
 ];

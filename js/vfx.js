@@ -454,3 +454,41 @@ export function pillar(x, bottom, w, { color = '#6ef0a0', ms = 800 } = {}) {
     { opacity: .8, transform: 'translateX(-50%) scaleX(.8)', offset: .7 }, { opacity: 0, transform: 'translateX(-50%) scaleX(0)' }],
   { duration: ms, easing: 'ease-out' }).onfinish = () => el.remove();
 }
+
+// 낙원 동전 던지기: 머리 위에서 +/− 두 면이 점점 느리게 번갈아 뒤집히다가 결과 면에서 멈춘다.
+// 멈추는 순간 resolve하고, 결과는 hold ms 더 보여준 뒤 사라진다.
+export function fortune(x, y, { good, name = '낙원', amt = 5, spin = 900, hold = 900, onFlip } = {}) {
+  const el = fxEl('fortune', x, y);
+  el.innerHTML = '<span class="ft-name"></span><div class="ft-coin"><b></b></div><em class="ft-res"></em>';
+  el.querySelector('.ft-name').textContent = name;
+  const coin = el.querySelector('.ft-coin'), face = coin.querySelector('b');
+  const show = g => { coin.classList.toggle('good', g); coin.classList.toggle('bad', !g); face.textContent = `${g ? '+' : '−'}${amt}`; };
+  const steps = [];
+  if (!reduced()) for (let d = 45, t = 0; t + d < spin; t += d, d *= 1.22) steps.push(d);
+  let g = steps.length % 2 ? !good : good; // 뒤집기를 다 마쳤을 때 결과 면이 나오도록 시작 면을 고른다
+  show(g);
+  el.animate([{ opacity: 0, transform: 'translate(-50%, -60%) scale(.4)' }, { opacity: 1, transform: 'translate(-50%, -100%) scale(1)' }],
+    { duration: 200, easing: 'cubic-bezier(.3,1.5,.5,1)' });
+  return new Promise(resolve => {
+    let i = 0;
+    const next = () => {
+      if (i >= steps.length) {
+        el.classList.add('done', good ? 'good' : 'bad');
+        el.querySelector('.ft-res').textContent = good ? '축복!' : '천벌!';
+        coin.animate([{ transform: 'scale(1.7)' }, { transform: 'scale(.9)', offset: .5 }, { transform: 'scale(1)' }], { duration: 340, easing: 'ease-out' });
+        setTimeout(() => {
+          el.animate([{ opacity: 1 }, { opacity: 0, transform: 'translate(-50%, -130%)' }], { duration: 260, fill: 'forwards' }).onfinish = () => el.remove();
+        }, hold);
+        resolve();
+        return;
+      }
+      const d = steps[i++];
+      g = !g;
+      show(g);
+      onFlip?.(g);
+      coin.animate([{ transform: 'rotateX(90deg)' }, { transform: 'rotateX(0deg)' }], { duration: d, easing: 'ease-out' });
+      setTimeout(next, d);
+    };
+    setTimeout(next, 140);
+  });
+}
