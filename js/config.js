@@ -16,7 +16,7 @@ export const RULES = {
   energy: 3,
   drawPerTurn: 5,
   handMax: 10,
-  turnMs: 30000,
+  turnMs: 40000,
   pickMs: 15000,
   minPlayers: 2,
   removeEvery: 3,     // N라운드마다 카드 제거 기회
@@ -33,6 +33,7 @@ export const RULES = {
   replayMaxMs: 13000,
   // 돈
   startGold: 10,
+  roundGold: 3,       // 라운드가 끝날 때마다 살아 있는 사람에게 주는 돈
   exRate: { hp: 1, gold: 1, en: 3 }, // 환전 가치: 에너지 1 = 체력 3 = 돈 3
   exEnergyMax: 3,     // 한 턴에 환전으로 얻을 수 있는 에너지
   shopSize: 4,        // 상점에 놓이는 카드 수 (라운드마다 새로 채운다)

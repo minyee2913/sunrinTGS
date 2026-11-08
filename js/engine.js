@@ -852,7 +852,11 @@ function endRound(G, now) {
   G.pick = {};
   for (const u of alive(G)) {
     G.pick[u] = { opts: rewardOpts(G, 3), done: false };
+    // 라운드 수입: 살아남은 사람에게 돈
+    P(G, u).gold += RULES.roundGold;
+    fx(G, u, 'gimmick', `돈 +${RULES.roundGold}`, { kind: 'buff' });
   }
+  log(G, `라운드 수입: 살아남은 사람 모두 돈 +${RULES.roundGold}`);
   G.deadline = now + RULES.pickMs + delayOnce(G);
   log(G, `${G.round}라운드 종료. 카드 선택 시간!`, 'sys');
 }
