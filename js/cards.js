@@ -1,4 +1,4 @@
-// 카드 140종 정의. 카드 그림은 img/cards/<id>.webp (친구 사진 카드 이미지 번호와 같다).
+// 카드 169종 정의. 카드 그림은 img/cards/<id>.webp (친구 사진 카드 이미지 번호와 같다).
 // scope: self(자신) / one(다른 생존자 1명) / others(모든 상대) / all(자신 포함 전원)
 //        random(무작위) / top(체력이 가장 높은 상대)
 // play(c): 엔진이 넘겨주는 c(카드 실행 도구)로 효과를 처리한다. engine.js의 makeCtx 참고.
@@ -337,6 +337,67 @@ export const CARDS = {
   p136: { name: '종이비행정찰', cost: 1, type: 'skill', scope: 'one', tag: '방해',
     text: '대상의 반응 카드 1개를 제거한다.', play: c => c.stripReact(c.target) },
 
+  // ── 추가 카드 141~169 ──
+  // 새 효과: 돈 얻기·뺏기·쓰기, 카드 뺏기, 해로운 기믹 제거, 최대 체력 증감, 순서 앞으로, 추가 턴, 알빠노
+  p141: { name: '바다의심판', cost: 3, type: 'atk', scope: 'others', tag: '폭탄',
+    text: '모든 상대에게 피해 7. 모든 상대의 최대 체력 -3.', play: c => c.others().forEach(t => { c.attack(t, 7); c.changeMaxHp(t, -3); }) },
+  p142: { name: '파도타고점프', cost: 1, type: 'def', scope: 'self', tag: '연타',
+    text: '방어도 5. 내 순서를 앞사람과 바꾼다.', play: c => { c.block(5); c.moveUp(); } },
+  p143: { name: '체크무늬속임수', cost: 1, type: 'skill', scope: 'one', tag: '방해',
+    text: '대상의 돈 4를 빼앗는다. 분신 1을 얻는다.', play: c => { c.stealGold(c.target, 4); c.gain('clone', 1); } },
+  p144: { name: '오류비내리기', cost: 2, type: 'skill', scope: 'others', tag: '방해',
+    text: '모든 상대의 최대 체력 -3. 모든 상대에게 성능평가 1.', play: c => c.others().forEach(t => { c.changeMaxHp(t, -3); c.give(t, 'weak', 1); }) },
+  p145: { name: '웃음참기실패', cost: 2, type: 'atk', scope: 'others', tag: '폭탄',
+    text: '모든 상대에게 피해 5. 자신에게 걸린 해로운 기믹을 모두 없앤다.', play: c => { c.attackOthers(5); c.cleanse(); } },
+  p146: { name: '안경궤도', cost: 1, type: 'def', scope: 'self', tag: '반격',
+    text: '방어도 4. 가진 돈 2당 방어도 +1 (최대 +8).', play: c => c.block(4 + Math.min(8, Math.floor((c.me.gold || 0) / 2))) },
+  p147: { name: '초근접감시', cost: 1, type: 'skill', scope: 'one', tag: '방해',
+    text: '대상의 반응 카드를 없앤다. 대상에게 실명 1. 카드 1장을 뽑는다.', play: c => { c.stripReact(c.target); c.give(c.target, 'blind', 1); c.draw(1); } },
+  p148: { name: '응원과부하', cost: 2, type: 'skill', scope: 'self', tag: '반격',
+    text: '최대 체력 +6, 체력 +6. 치녀 1을 얻는다.', play: c => { c.changeMaxHp(c.me, 6); c.gain('str', 1); } },
+  p149: { name: '리모컨압수', cost: 1, type: 'skill', scope: 'one', tag: '방해', exhaust: true,
+    text: '대상의 손패에서 무작위 1장을 뺏는다. 사용 후 덱에서 사라진다.', play: c => c.stealCard(c.target) },
+  p150: { name: '봉제인형돌격', cost: 1, type: 'atk', scope: 'one', tag: '연타',
+    text: '피해 6. 만준 1을 얻는다.', play: c => { c.attack(c.target, 6); c.gain('manjun', 1); } },
+  p151: { name: '문틈봉쇄', cost: 2, type: 'def', scope: 'self', tag: '반격',
+    text: '방어도 8. 최대 체력 +3, 체력 +3.', play: c => { c.block(8); c.changeMaxHp(c.me, 3); } },
+  p152: { name: '광안대교사슬', cost: 2, type: 'skill', scope: 'one', tag: '방해',
+    text: '대상에게 둔화 2. 대상의 다음 턴 에너지 최대치를 2로 고정.', play: c => { c.give(c.target, 'slow', 2); c.energyCap(c.target, 2); } },
+  p153: { name: '달빛후퇴', cost: 1, type: 'def', scope: 'self', tag: '반격',
+    text: '방어도 6. 자신에게 걸린 해로운 기믹을 모두 없앤다.', play: c => { c.block(6); c.cleanse(); } },
+  p154: { name: '하품포효', cost: 1, type: 'atk', scope: 'others', tag: '방해',
+    text: '모든 상대에게 피해 3, 둔화 1. 자신도 둔화 1.', play: c => { c.others().forEach(t => { c.attack(t, 3); c.give(t, 'slow', 1); }); c.gain('slow', 1); } },
+  p155: { name: '노란불신호', cost: 2, type: 'skill', scope: 'others', tag: '방해',
+    text: '모든 상대에게 둔화 1. 내 순서를 앞사람과 바꾼다.', play: c => { c.giveOthers('slow', 1); c.moveUp(); } },
+  p156: { name: '탄산분수', cost: 1, type: 'atk', scope: 'one', tag: '폭탄',
+    text: '돈을 최대 12까지 쓰고, 쓴 돈만큼 대상에게 피해.', play: c => { const k = c.spendGold(12); if (k) c.attack(c.target, k); } },
+  p157: { name: '눈빛관통', cost: 2, type: 'atk', scope: 'one', tag: '방해',
+    text: '대상의 방어도를 무시하고 피해 6. 대상의 최대 체력 -4.', play: c => { c.attack(c.target, 6, { pierce: true }); c.changeMaxHp(c.target, -4); } },
+  p158: { name: '손가락분신술', cost: 1, type: 'skill', scope: 'self', tag: '연타', exhaust: true,
+    text: '분신 2를 얻는다. 이 턴이 끝나면 내 추가 턴. 사용 후 덱에서 사라진다.', play: c => { c.gain('clone', 2); c.extraTurn(); } },
+  p159: { name: '수업중드림월드', cost: 1, type: 'skill', scope: 'self', tag: '폭탄',
+    text: '체력 8 회복. 해로운 기믹을 모두 없앤 뒤 즉시 내 턴 종료.', play: c => { c.heal(8); c.cleanse(); c.endTurn(); } },
+  p160: { name: '밀짚모자태풍', cost: 2, type: 'atk', scope: 'others', tag: '폭탄',
+    text: '모든 상대에게 피해 4. 모든 상대의 돈을 1씩 빼앗는다.', play: c => c.others().forEach(t => { c.attack(t, 4); c.stealGold(t, 1); }) },
+  p161: { name: '볼터치반사', cost: 1, type: 'react', scope: 'self', tag: '반격', react: { reflect: 0.5, give: { weak: 1 } },
+    text: '반응 설치: 다음 공격 피해의 절반(내림)을 막고 그만큼 공격자에게 돌려준다. 공격자에게 성능평가 1.' },
+  p162: { name: '표정잠금', cost: 1, type: 'def', scope: 'self', tag: '반격',
+    text: '방어도 7. 알빠노 1을 얻는다.', play: c => { c.block(7); c.gain('alppano', 1); } },
+  p163: { name: '인간투석기', cost: 2, type: 'atk', scope: 'one', tag: '폭탄',
+    text: '피해 10. 자신도 피해 2. 내 순서를 앞사람과 바꾼다.', play: c => { c.attack(c.target, 10); c.selfDamage(2); c.moveUp(); } },
+  p164: { name: '수상한미소', cost: 0, type: 'skill', scope: 'one', tag: '방해', limit: 1,
+    text: '대상의 돈 3을 빼앗는다. 한 턴에 1번.', play: c => c.stealGold(c.target, 3) },
+  p165: { name: '생각읽기', cost: 2, type: 'skill', scope: 'one', tag: '방해',
+    text: '대상의 손패에서 무작위 1장을 뺏는다. 카드 1장을 뽑는다.', play: c => { c.stealCard(c.target); c.draw(1); } },
+  p166: { name: '넥타이회피', cost: 1, type: 'react', scope: 'self', tag: '반격', react: { reduce: 6, gain: { alppano: 1 } },
+    text: '반응 설치: 다음에 받는 공격의 피해를 6 줄이고, 알빠노 1을 얻는다.' },
+  p167: { name: '과자비상식량', cost: 1, type: 'skill', scope: 'self', tag: '반격',
+    text: '돈 3을 얻는다. 그 뒤 가진 돈 2당 체력 1 회복 (최대 8).', play: c => { c.gainGold(3); c.heal(Math.min(8, Math.floor((c.me.gold || 0) / 2))); } },
+  p168: { name: '픽셀쿨타임', cost: 2, type: 'react', scope: 'self', tag: '반격', react: { nullify: true, give: { slow: 1 }, gain: { alppano: 1 } },
+    text: '반응 설치: 다음 공격의 피해를 무효로 하고 공격자에게 둔화 1. 알빠노 1을 얻는다.' },
+  p169: { name: '둘이서딴소리', cost: 1, type: 'skill', scope: 'one', tag: '방해',
+    text: '나와 대상의 돈을 맞바꾼다. 대상에게 예? 1.', play: c => { c.swapGold(c.target); c.give(c.target, 'ye', 1); } },
+
   // ── 방해 카드 (보상으로 나오지 않음) ──
   p79: { name: '속이부글부글', cost: 1, type: 'curse', scope: 'self', curse: true, exhaust: true, endInHand: 2,
     text: '사용하면 덱에서 사라진다. 턴이 끝날 때 손패에 있으면 자신에게 피해 2.', play: () => {} },
@@ -361,14 +422,14 @@ export const RARITY = {
   epic: { name: '영웅', w: 12, boost: 1.5 },
   legend: { name: '전설', w: 3, boost: 2 },
 };
-const LEGEND = ['p67', 'p12', 'p60', 'p68', 'p140', 'p106'];
-const EPIC = ['p05', 'p11', 'p15', 'p63', 'p44', 'p92', 'p96', 'p98', 'p99', 'p56', 'p83', 'p139'];
+const LEGEND = ['p67', 'p12', 'p60', 'p68', 'p140', 'p106', 'p158'];
+const EPIC = ['p05', 'p11', 'p15', 'p63', 'p44', 'p92', 'p96', 'p98', 'p99', 'p56', 'p83', 'p139', 'p141', 'p156', 'p163'];
 // ── 키워드 ──
 // 보존(retain): 턴이 끝나도 버리지 않고 손에 남는다.
 // 회방(ambush): 다른 사람의 턴에 몰래 쓴다. 그 턴이 끝날 때 마지막에 공개·발동되고, 비용은 내 다음 턴 에너지에서 빠진다.
 //   '상대 1명' 카드는 그 턴을 진행한 사람에게 쓴다.
 const RETAIN = ['p19', 'p51', 'p73', 'p49', 'p67', 'p15', 'p12', 'p55'];
-const AMBUSH = ['p78', 'p65', 'p10', 'p38', 'p57', 'p75', 'p61', 'p03'];
+const AMBUSH = ['p78', 'p65', 'p10', 'p38', 'p57', 'p75', 'p61', 'p03', 'p158']; // p158 손가락분신술: 추가 턴
 for (const id of RETAIN) CARDS[id].retain = true;
 for (const id of AMBUSH) CARDS[id].ambush = true;
 

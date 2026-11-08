@@ -712,3 +712,13 @@ body.aiming .fighter.locked .f-body { filter: drop-shadow(0 0 10px var(--red)); 
   .econ-btns .tg { height: 30px; }
   .wallet { margin-left: 0; order: 3; width: 100%; }
 }
+
+/* ══ 반응 카드 공개: 캐릭터 머리 위에서 '?' 카드가 뒤집힌다 ══ */
+.field-react { position: absolute; z-index: 7; pointer-events: none; transform: translate(-50%, -100%); perspective: 900px; padding-bottom: 6px; }
+.field-react .card { --cw: min(11vw, 17vh, 120px); }
+.fr-flip { position: relative; transform-style: preserve-3d; }
+.fr-back, .fr-face { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.fr-back { position: absolute; inset: 0; }
+.fr-face { transform: rotateY(180deg); }
+.fr-face .card { box-shadow: 0 0 0 3px #c3a6ff, 0 0 36px rgba(177,151,252,.85); }
+@media (max-width: 720px) { .field-react .card { --cw: min(26vw, 15vh, 110px); } }

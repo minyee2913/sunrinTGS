@@ -357,6 +357,12 @@ em { font-style: normal; font-size: 11px; font-weight: 700; padding: 1px 6px; ba
 .ed-row input { width: 100%; height: 36px; padding: 0 10px; background: var(--panel2); border: 1px solid var(--line2); border-bottom: 2px solid var(--cyan); color: var(--text); font-size: 15px; font-weight: 700; outline: none; user-select: text; border-radius: 0; }
 .ed-row input:focus { border-color: var(--cyan); }
 .ed-cost input { font-family: var(--mono-f); text-align: center; }
+.ed-rar { width: 110px; flex: none; }
+.ed-boost { flex: 1; }
+.ed-boost input { font-family: var(--mono-f); }
+.ed-row select { width: 100%; height: 36px; padding: 0 8px; background: var(--panel2); border: 1px solid var(--line2); border-bottom: 2px solid var(--cyan); color: var(--text); font-size: 15px; font-weight: 700; outline: none; border-radius: 0; }
+.ed-row select:focus { border-color: var(--cyan); }
+.ed-row select option { background: var(--panel2); color: var(--text); }
 .ed-orig { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
 
 #toast { position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 20px); z-index: 60; background: var(--panel); border: 1px solid var(--line2); border-left: 3px solid var(--amber); color: var(--text); font-weight: 600; padding: 12px 18px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; max-width: calc(100% - 32px); }

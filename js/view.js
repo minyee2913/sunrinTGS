@@ -1,7 +1,7 @@
 // 화면 조각을 만드는 함수들
 import { CARDS, TYPE, SCOPE, RARITY } from './cards.js';
 import { charSVG } from './chars.js?v=sprite-paths-2';
-import { cardText, cardName, cardCost } from './editor.js';
+import { cardText, cardName, cardCost, cardRarity, cardBoost } from './editor.js';
 import { GIMMICKS, GIMMICK_RULE, linkGimmicks } from './gimmicks.js';
 
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -9,17 +9,18 @@ export const esc = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;
 // hot: 지금 쓰면 역전이 발동한다
 export function cardHTML(id, { u = '', act = 'card', sel = false, off = false, size = '', hot = false } = {}) {
   const c = CARDS[id];
-  const R = RARITY[c.rarity];
+  // 등급·역전은 카드 수정해보기에서 고친 값으로 보여준다
+  const rarity = cardRarity(id), boost = cardBoost(id);
   const art = `<img src="img/cards/${c.photo}.webp" alt="" loading="lazy" draggable="false">`;
-  const cls = ['card', `t-${c.type}`, `r-${c.rarity}`, size, sel && 'sel', off && 'off', hot && R?.boost && 'hot'].filter(Boolean).join(' ');
+  const cls = ['card', `t-${c.type}`, `r-${rarity}`, size, sel && 'sel', off && 'off', hot && boost && 'hot'].filter(Boolean).join(' ');
   const data = act ? `data-act="${act}" data-u="${u}" data-id="${id}"` : '';
   return `<div class="${cls}" ${data}>
     <div class="cost">${cardCost(id)}</div>
-    ${c.rarity !== 'common' ? `<div class="rar">${R.name}</div>` : ''}
+    ${rarity !== 'common' ? `<div class="rar">${RARITY[rarity].name}</div>` : ''}
     <div class="art">${art}</div>
     <div class="cname">${esc(cardName(id))}</div>
     <div class="ctype">${TYPE[c.type]} · ${SCOPE[c.scope]}</div>
-    <div class="ctext" data-text-of="${id}">${c.ambush ? '<span class="kw amb" data-kw="ambush">회방</span> ' : ''}${c.retain ? '<span class="kw ret" data-kw="retain">보존</span> ' : ''}${linkGimmicks(esc(cardText(id)))}${R?.boost ? ` <span class="cb" data-kw="comeback" data-n="${R.boost}">역전 ×${R.boost}</span>` : ''}</div>
+    <div class="ctext" data-text-of="${id}">${c.ambush ? '<span class="kw amb" data-kw="ambush">회방</span> ' : ''}${c.retain ? '<span class="kw ret" data-kw="retain">보존</span> ' : ''}${linkGimmicks(esc(cardText(id)))}${boost ? ` <span class="cb" data-kw="comeback" data-n="${boost}">역전 ×${boost}</span>` : ''}</div>
   </div>`;
 }
 

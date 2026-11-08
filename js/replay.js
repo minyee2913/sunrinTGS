@@ -12,7 +12,7 @@ import { sfx } from './sfx.js';
 import { createMotion } from './motion.js';
 
 const AMBUSH_MS = 950; // 회방! 등장
-const STEP = { dmg: 440, ko: 1600, comeback: 620, trigger: 440, block: 300, heal: 340, react: 320, nullify: 280, strip: 280, unreact: 280, debuff: 280, gimmick: 300, roll: 1500 };
+const STEP = { dmg: 440, ko: 1600, comeback: 620, trigger: 1300, block: 300, heal: 340, react: 320, nullify: 280, strip: 280, unreact: 280, debuff: 280, gimmick: 300, roll: 1500 };
 const CARD_MS = 1050; // 카드 컷인 시간
 const CRIT = 10;      // 이 피해부터 치명타 연출
 const TOTAL_MS = 750; // 마지막 턴 합계
@@ -259,6 +259,32 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
   field.appendChild(title);
   field.classList.add('replaying');
 
+  // 반응 카드 공개: 필드 안(카메라와 같이 움직인다) 캐릭터 머리 위에 '?' 카드를 띄우고 뒤집어 앞면을 보여준다.
+  // 이어지는 효과(방어도·무효·반격 등)가 나오는 동안 떠 있다가 사라진다.
+  const reveals = new Set();
+  const revealReact = (el, faceHTML) => {
+    if (stopped || !field.appendChild) return;
+    const fr = field.getBoundingClientRect(), r = (el.querySelector('.f-body') || el).getBoundingClientRect();
+    const k = fr.width / (field.offsetWidth || fr.width) || 1; // 카메라 확대 배율 (화면 좌표 → 필드 좌표)
+    const box = document.createElement('div');
+    box.className = 'field-react';
+    box.innerHTML = `<div class="fr-flip"><div class="fr-back">${hiddenCardHTML('mid')}</div><div class="fr-face">${faceHTML || hiddenCardHTML('mid')}</div></div>`;
+    Object.assign(box.style, { left: `${(r.left + r.width / 2 - fr.left) / k}px`, top: `${(r.top - fr.top) / k}px` });
+    field.appendChild(box);
+    reveals.add(box);
+    const flip = box.querySelector('.fr-flip');
+    const less = reduced();
+    box.animate([{ opacity: 0, transform: 'translate(-50%, -80%) scale(.4)' }, { opacity: 1, transform: 'translate(-50%, -100%) scale(1.1)', offset: .6 }, { opacity: 1, transform: 'translate(-50%, -100%) scale(1)' }],
+      { duration: 220 * speed + 80, easing: 'cubic-bezier(.3,1.4,.5,1)' });
+    flip?.animate?.(less ? [{ transform: 'rotateY(180deg)' }, { transform: 'rotateY(180deg)' }] : [
+      { transform: 'rotateY(0deg)' }, { transform: 'rotateY(0deg)', offset: .3 }, { transform: 'rotateY(200deg)', offset: .8 }, { transform: 'rotateY(180deg)' },
+    ], { duration: 520 * speed + 160, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards' });
+    setTimeout(() => {
+      if (!reveals.has(box)) return;
+      box.animate([{ opacity: 1 }, { opacity: 0, transform: 'translate(-50%, -120%) scale(.9)' }], { duration: 260, fill: 'forwards' }).onfinish = () => { box.remove(); reveals.delete(box); };
+    }, 1900 * speed + 900);
+  };
+
   const showBanner = (g, actorEl) => {
     const fr = field.getBoundingClientRect();
     const x = actorEl ? center(actorEl).x - fr.left : fr.width / 2;
@@ -415,14 +441,30 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
           sfx.crit();
           await wait(STEP.comeback);
           break;
-        case 'trigger':
+        case 'trigger': {
+          // 반응 카드 발동: 숨겨 두었던 카드를 컷인으로 크게 보여준 뒤, 발동한 캐릭터 머리 위에서 '?' 카드가 뒤집혀 공개된다
+          const c = f.id && CARDS[f.id];
+          await camTo({ x, y }, 1.22, 180);
+          if (stopped) return;
+          const cc = center(el);
           motion.play(el, 'cast');
-          V.flash('rgba(177,151,252,.35)', 200);
-          V.ring(x, y, { color: '#b197fc', r1: 120, w: 10 });
-          V.text(x, y - 70, `⚡ ${f.v}!`, 'f-trigger');
+          V.impactFrame(80);
+          V.flash('rgba(177,151,252,.4)', 220);
+          V.magicCircle(cc.x, cc.r.bottom - 6, cc.r.width * 1.4, { color: '#b197fc', ms: STEP.trigger * speed + 400 });
+          V.cutIn({
+            art: c ? `img/cards/${c.photo}.webp` : null, name: c ? cardName(f.id) : f.v,
+            sub: `반응 발동 · ${nameOf(f.u)}`, type: 'react', rarity: c?.rarity, flip: !!el.classList.contains('r'), ms: STEP.trigger * .55 * speed + 200,
+          });
           sfx.trigger();
-          await wait(STEP.trigger);
+          await wait(STEP.trigger * .5);
+          if (stopped) return;
+          revealReact(el, c ? cardHTML(f.id, { act: '', size: 'mid' }) : null);
+          V.ring(cc.x, cc.y, { color: '#b197fc', r1: 120, w: 10 });
+          V.rays(cc.x, cc.r.top, { n: 26, colors: ['#c3a6ff', '#fff'], r1: 30, life: 380 });
+          sfx.react();
+          await wait(STEP.trigger * .5);
           break;
+        }
         case 'nullify':
           motion.play(el, 'guard');
           V.ring(x, y, { color: '#e0d2ff', r1: 90, w: 8 });
@@ -496,6 +538,8 @@ export function playReplay(rep, { field, shakeEl, players, nameOf }) {
     motion.stop();
     banner.remove();
     title.remove();
+    for (const r of reveals) r.remove();
+    reveals.clear();
     V.cinema(false);
     V.comboEnd();
     field.classList.remove('replaying', 'focusing', 'ko-moment');

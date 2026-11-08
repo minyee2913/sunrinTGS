@@ -1,9 +1,10 @@
-// 카드 수정해보기: 이 브라우저에만 저장되는 카드 이름·비용·설명 덮어쓰기와 파일 내보내기.
-// 실제 카드 효과와 게임에서 쓰는 비용(js/cards.js)은 바뀌지 않는다. 내보낸 파일을 받아서 반영한다.
-import { CARDS, TYPE, SCOPE } from './cards.js';
+// 카드 수정해보기: 이 브라우저에만 저장되는 카드 이름·비용·설명·등급·역전 덮어쓰기와 파일 내보내기.
+// 실제 카드 효과와 게임에서 쓰는 비용·등급(js/cards.js)은 바뀌지 않는다. 내보낸 파일을 받아서 반영한다.
+import { CARDS, TYPE, SCOPE, RARITY } from './cards.js';
 
 const KEY = 'hp_card_text';
-// 카드마다 고친 칸만 { name, cost, text }로 저장한다. 예전 형식(설명 문자열)도 읽는다.
+// 카드마다 고친 칸만 { name, cost, text, rarity, boost }로 저장한다.
+// boost는 역전 배율 (0 = 역전 없음). 고치지 않으면 등급의 기본 배율(영웅 ×1.5, 전설 ×2)을 따른다. 예전 형식(설명 문자열)도 읽는다.
 let edits = (() => {
   try {
     const o = JSON.parse(localStorage.getItem(KEY)) || {};
@@ -11,7 +12,7 @@ let edits = (() => {
       if (!CARDS[id]) { delete o[id]; continue; }
       if (typeof o[id] === 'string') o[id] = { text: o[id] };
       // 반영된 수정은 이제 원래 값과 같으므로 지운다
-      for (const f of ['name', 'cost', 'text']) if (o[id][f] === CARDS[id][f]) delete o[id][f];
+      for (const f of ['name', 'cost', 'text', 'rarity']) if (o[id][f] === CARDS[id][f]) delete o[id][f];
       if (!Object.keys(o[id]).length) delete o[id];
     }
     return o;
@@ -23,16 +24,26 @@ const field = (id, f) => edits[id]?.[f] ?? CARDS[id][f];
 export const cardText = id => field(id, 'text');
 export const cardName = id => field(id, 'name');
 export const cardCost = id => field(id, 'cost');
+export const cardRarity = id => field(id, 'rarity');
+export const rarityBoost = r => RARITY[r]?.boost || 0;
+export const cardBoost = id => edits[id]?.boost ?? rarityBoost(cardRarity(id));
+// 수정 전 값 (되돌리기·원래 값 표시용)
+export const origField = (id, f) => (f === 'boost' ? rarityBoost(CARDS[id].rarity) : CARDS[id][f]);
 export const isEdited = id => id in edits;
 export const editCount = () => Object.keys(edits).length;
 
-// f: 'name' | 'cost' | 'text'. 비우거나 원래 값과 같으면 그 칸은 원래대로.
+// f: 'name' | 'cost' | 'text' | 'rarity' | 'boost'. 비우거나 원래 값과 같으면 그 칸은 원래대로.
 export function setCardField(id, f, v) {
   if (f === 'cost') v = v === '' || !Number.isFinite(+v) ? null : Math.max(0, Math.min(9, Math.round(+v)));
+  else if (f === 'boost') v = v === '' || !Number.isFinite(+v) ? null : Math.max(0, Math.min(9, Math.round(+v * 10) / 10));
+  else if (f === 'rarity') v = RARITY[v] ? v : null;
   else if (v.trim() === '') v = null;
   const e = edits[id] || {};
-  if (v === null || v === CARDS[id][f]) delete e[f];
+  // 역전은 지금 등급의 기본 배율과 같으면 따로 저장하지 않는다
+  const base = f === 'boost' ? rarityBoost(e.rarity ?? CARDS[id].rarity) : CARDS[id][f];
+  if (v === null || v === base) delete e[f];
   else e[f] = v;
+  if (f === 'rarity' && e.boost === rarityBoost(e.rarity ?? CARDS[id].rarity)) delete e.boost;
   if (Object.keys(e).length) edits[id] = e;
   else delete edits[id];
   save();
@@ -44,7 +55,7 @@ export function resetAll() { edits = {}; save(); }
 function rows() {
   return Object.values(CARDS).map(c => ({
     id: c.id, no: +c.id.slice(1), type: TYPE[c.type], scope: SCOPE[c.scope],
-    name: c.name, cost: c.cost, text: c.text,
+    name: c.name, cost: c.cost, text: c.text, rarity: c.rarity, boost: origField(c.id, 'boost'),
     edited: edits[c.id] ? { ...edits[c.id] } : null,
   })).sort((a, b) => a.no - b.no);
 }
@@ -67,10 +78,14 @@ export function exportJSON() {
 
 export function exportCSV() {
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const lines = [['번호', 'ID', '종류', '대상', '원래 카드명', '수정한 카드명', '원래 비용', '수정한 비용', '원래 설명', '수정한 설명', '수정 여부'].map(q).join(',')];
+  const lines = [['번호', 'ID', '종류', '대상', '원래 카드명', '수정한 카드명', '원래 비용', '수정한 비용', '원래 설명', '수정한 설명',
+    '원래 등급', '수정한 등급', '원래 역전', '수정한 역전', '수정 여부'].map(q).join(',')];
+  const rn = r => (r ? RARITY[r].name : '');
+  const bn = b => (b == null ? '' : b ? `×${b}` : '없음');
   for (const r of rows()) {
     const e = r.edited || {};
-    lines.push([r.no, r.id, r.type, r.scope, r.name, e.name, r.cost, e.cost, r.text, e.text, r.edited ? 'O' : ''].map(q).join(','));
+    lines.push([r.no, r.id, r.type, r.scope, r.name, e.name, r.cost, e.cost, r.text, e.text,
+      rn(r.rarity), rn(e.rarity), bn(r.boost), bn(e.boost), r.edited ? 'O' : ''].map(q).join(','));
   }
   download(`허리펴라_카드수정_${stamp()}.csv`, '﻿' + lines.join('\n'), 'text/csv');
 }

@@ -27,6 +27,8 @@ export const GIMMICKS = {
     desc: '다음 턴까지 데미지를 받지 않으면 체력 10 회복' },
   hush: { name: '쉿', kind: 'buff', short: '쉿',
     desc: '자신이 가진 기믹 모두에게 숨기기' },
+  alppano: { name: '알빠노', kind: 'buff', short: '알',
+    desc: '역전 효과를 무시한다 (상대가 역전으로 키운 피해·기믹 등을 원래 수치로 받는다)' },
   paradise: { name: '낙원', kind: 'mixed', short: '낙',
     desc: '다음 턴에 체력이 5 증가 혹은 감소함' },
   // 예? → 엄 → 티~원 → 줴줴이야~ 순서로 자기 턴마다 5% 확률로 바뀐다 (next)

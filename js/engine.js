@@ -103,7 +103,7 @@ export function createGame({ gameId, players, seed, now }) {
       draw: [], hand: [], discard: [],
       react: null, drawBonus: 0, enPen: 0, enBonus: 0, enCap: 0, keepBlock: false, st: {}, clean: true,
       atkSince: [], atkRecent: [], plays: {}, atkCount: 0, out: null,
-      gold: RULES.startGold, shop: [], exEn: 0, tradeN: 0,
+      gold: RULES.startGold, shop: [], exEn: 0, tradeN: 0, sellN: 0,
       stats: { dealt: 0, taken: 0, self: 0, maxHit: 0, healed: 0, cards: 0, blocked: 0, kills: 0 },
     };
   }
@@ -157,6 +157,7 @@ function beginTurn(G, uid, now) {
   p.drawBonus = 0;
   p.exEn = 0;
   p.tradeN = 0;
+  p.sellN = 0;
   turnStartGimmicks(G, p);
   // 꼼짝 마!: 이번 턴 에너지 최대치 고정 (AI로 얻은 에너지까지 포함해서)
   if (p.enCap) {
@@ -302,6 +303,14 @@ export function endTurn(G, uid, now, reason = '') {
   p.drawBonus = 0;
   sealReplay(G);
   if (checkWin(G)) return null;
+  // 회방으로 얻은 추가 턴: 순서와 상관없이 바로 그 사람의 턴. 끝나면 원래 순서(turnIdx)대로 이어간다.
+  while (G.extra?.length) {
+    const q = P(G, G.extra.shift());
+    if (!q?.alive) continue;
+    log(G, `⏩ ${q.name}의 추가 턴!`, 'sys');
+    beginTurn(G, q.uid, now);
+    return null;
+  }
   nextTurn(G, now);
   return null;
 }
@@ -377,6 +386,7 @@ function attack(G, src, tgt, n, { pierce = false } = {}) {
   const notes = [];
   if (R) {
     tgt.react = null;
+    fx(G, tgt.uid, 'trigger', rc.name, { id: rc.id, s: src.uid }); // 카드 공개가 먼저, 효과(방어도·무효 등)는 그 뒤에
     if (R.block) { const b = R.block + (tgt.st.dex || 0); tgt.block += b; fx(G, tgt.uid, 'block', b); notes.push(`방어도 +${b}`); }
     if (R.reduce) { n = Math.max(0, n - R.reduce); notes.push(`피해 ${R.reduce} 감소`); }
     if (R.nullify) { n = 0; fx(G, tgt.uid, 'nullify', 0); notes.push('피해 무효'); }
@@ -389,7 +399,6 @@ function attack(G, src, tgt, n, { pierce = false } = {}) {
     for (const [id, k] of Object.entries(R.give || {})) notes.push(`${src.name}에게 ${gname(id)} ${k}`);
     for (const [id, k] of Object.entries(R.gain || {})) notes.push(`${gname(id)} ${k} 획득`);
     log(G, `${tgt.name}의 반응 발동: ${rc.name}! ${notes.join(', ')}`, 'react');
-    fx(G, tgt.uid, 'trigger', rc.name, { id: rc.id });
   }
   const dmg = n > 0 ? hurt(G, tgt, n, { src, pierce }) : 0;
   if (n <= 0 && !R?.nullify) fx(G, tgt.uid, 'dmg', 0, { s: src.uid, b: 0, h: tgt.hp });
@@ -463,23 +472,93 @@ function makeCtx(G, p, card, target) {
   const others = () => othersOf(G, p);
   const pickRandom = list => list[Math.floor(rand(G) * list.length)] || null;
   const boost = RARITY[card.rarity]?.boost && isBehind(G, p) ? RARITY[card.rarity].boost : 1;
-  const B = n => (boost === 1 || !n ? n : Math.sign(n) * Math.ceil(Math.abs(n) * boost));
+  // 역전 배율. 알빠노를 가진 다른 사람(t)에게는 원래 수치로 적용한다.
+  const B = (n, t = null) => (boost === 1 || !n || (t && t !== p && t.st.alppano) ? n : Math.sign(n) * Math.ceil(Math.abs(n) * boost));
   const c = {
     G, me: p, target, ended: false, hits: [], boost,
     attacksThisTurn: p.atkCount,
     recentAttackers: p.atkRecent.length,
     others,
-    attack: (t, n, opts) => { if (t) c.hits.push(t.uid); return attack(G, p, t, B(n), opts); },
+    attack: (t, n, opts) => { if (t) c.hits.push(t.uid); return attack(G, p, t, B(n, t), opts); },
     attackOthers: n => others().forEach(t => c.attack(t, n)),
     selfDamage: (n, pierce = false) => hurt(G, p, n, { src: p, pierce }),
     block: n => { n = B(n) + (p.st.dex || 0); p.block += n; fx(G, p.uid, 'block', n); },
-    giveBlock: (t, n) => { if (t?.alive) { n = B(n) + (t.st.dex || 0); t.block += n; fx(G, t.uid, 'block', n); } },
+    giveBlock: (t, n) => { if (t?.alive) { n = B(n, t) + (t.st.dex || 0); t.block += n; fx(G, t.uid, 'block', n); } },
     gain: (id, n) => addGimmick(G, p, id, B(n)),
-    give: (t, id, n) => addGimmick(G, t, id, B(n)),
-    giveOthers: (id, n) => othersOf(G, p).forEach(t => addGimmick(G, t, id, B(n))),
+    give: (t, id, n) => addGimmick(G, t, id, B(n, t)),
+    giveOthers: (id, n) => othersOf(G, p).forEach(t => addGimmick(G, t, id, B(n, t))),
     keepBlock: () => { p.keepBlock = true; },
     heal: n => healP(G, p, B(n)),
-    healOther: (t, n) => healP(G, t, B(n)),
+    healOther: (t, n) => healP(G, t, B(n, t)),
+    // ── 돈 ──
+    gainGold: n => { n = B(n); if (n > 0) { p.gold += n; fx(G, p.uid, 'gimmick', `돈 +${n}`, { kind: 'buff' }); } return n; },
+    // 대상의 돈을 n까지 빼앗는다. 빼앗은 양을 돌려준다.
+    stealGold: (t, n) => {
+      if (!t?.alive) return 0;
+      const k = Math.min(t.gold || 0, B(n, t));
+      if (k <= 0) { fx(G, t.uid, 'gimmick', '뺏을 돈 없음', { kind: 'mixed' }); return 0; }
+      t.gold -= k;
+      p.gold += k;
+      fx(G, t.uid, 'debuff', `돈 -${k}`);
+      fx(G, p.uid, 'gimmick', `돈 +${k}`, { kind: 'buff' });
+      log(G, `${p.name}, ${t.name}의 돈 ${k}을 빼앗았다`);
+      return k;
+    },
+    // 내 돈을 max까지 쓴다. 쓴 양을 돌려준다.
+    spendGold: max => { const k = Math.min(p.gold || 0, max); if (k > 0) { p.gold -= k; fx(G, p.uid, 'gimmick', `돈 -${k}`, { kind: 'mixed' }); } return k; },
+    swapGold: t => {
+      if (!t?.alive) return;
+      [p.gold, t.gold] = [t.gold || 0, p.gold || 0];
+      fx(G, p.uid, 'gimmick', `돈 ${p.gold}`, { kind: 'mixed' });
+      fx(G, t.uid, 'gimmick', `돈 ${t.gold}`, { kind: 'mixed' });
+      log(G, `${p.name}와 ${t.name}의 돈이 바뀌었다`);
+    },
+    // 대상의 손패에서 무작위 카드 1장을 뺏어 내 손으로 (손이 꽉 차면 버린 더미로)
+    stealCard: t => {
+      if (!t?.alive || !t.hand.length) { if (t) fx(G, t.uid, 'gimmick', '뺏을 카드 없음', { kind: 'mixed' }); return null; }
+      const inst = t.hand.splice(Math.floor(rand(G) * t.hand.length), 1)[0];
+      (p.hand.length < RULES.handMax ? p.hand : p.discard).push(inst);
+      fx(G, t.uid, 'debuff', '카드 1장 뺏김');
+      fx(G, p.uid, 'gimmick', '카드 +1', { kind: 'buff' });
+      log(G, `${p.name}, ${t.name}의 카드 1장을 뺏었다`);
+      return inst;
+    },
+    // 해로운 기믹을 모두 없앤다
+    cleanse: (t = p) => {
+      if (!t?.alive) return;
+      const bad = Object.keys(t.st).filter(id => GIMMICKS[id]?.kind === 'debuff');
+      if (!bad.length) return;
+      for (const id of bad) { delete t.st[id]; if (t.stNew) delete t.stNew[id]; }
+      fx(G, t.uid, 'gimmick', '해로운 기믹 제거', { kind: 'buff' });
+      log(G, `${t.name}의 해로운 기믹이 모두 사라졌다`);
+    },
+    // 최대 체력 증감. 늘면 체력도 그만큼 오르고, 줄면 체력이 최대치를 넘지 않게 깎인다.
+    changeMaxHp: (t, n) => {
+      if (!t?.alive || !n) return;
+      n = B(n, t);
+      t.maxHp = Math.max(1, t.maxHp + n);
+      if (n > 0) t.hp += n;
+      t.hp = Math.min(t.hp, t.maxHp);
+      fx(G, t.uid, n > 0 ? 'gimmick' : 'debuff', `최대 체력 ${n > 0 ? '+' : ''}${n}`, { kind: n > 0 ? 'buff' : 'debuff' });
+      if (n > 0) fx(G, t.uid, 'heal', n, { h: t.hp });
+      log(G, `${t.name}의 최대 체력 ${n > 0 ? '+' : ''}${n} (${t.hp}/${t.maxHp})`);
+    },
+    // 내 순서를 바로 앞의 살아 있는 사람과 바꾼다. 이번 라운드에 이미 턴을 한 사람과 바꾸므로 이번 라운드 진행은 그대로다.
+    moveUp: () => {
+      const i = G.order.indexOf(p.uid);
+      let j = i - 1;
+      while (j >= 0 && !P(G, G.order[j]).alive) j--;
+      if (j < 0) { fx(G, p.uid, 'gimmick', '이미 맨 앞', { kind: 'mixed' }); return false; }
+      // 추가 턴 중에 이번 라운드 턴을 이미 한 사람(turnIdx 이하)과 아직 안 한 나를 바꾸면 그 사람이 두 번 하게 되므로 막는다
+      if (j <= G.turnIdx && G.turnIdx < i) { fx(G, p.uid, 'gimmick', '지금은 순서를 못 바꿈', { kind: 'mixed' }); return false; }
+      const q = P(G, G.order[j]);
+      [G.order[i], G.order[j]] = [G.order[j], G.order[i]];
+      fx(G, p.uid, 'gimmick', '순서 앞으로!', { kind: 'buff' });
+      log(G, `${p.name}, 순서를 ${q.name}의 앞으로 옮겼다`, 'sys');
+      return true;
+    },
+    // 이 턴이 끝나면 바로 내 추가 턴 (회방 카드용)
+    extraTurn: () => { (G.extra ||= []).push(p.uid); fx(G, p.uid, 'gimmick', '추가 턴 예약!', { kind: 'buff' }); },
     draw: n => draw(G, p, B(n)),
     gainEnergy: n => { p.energy += B(n); },
     energyPenalty: t => { if (t?.alive) { t.enPen = 1; fx(G, t.uid, 'debuff', '에너지 -1'); } },
@@ -764,9 +843,11 @@ export function sellCard(G, uid, cardU) {
   const id = p.hand[i].id;
   if (CARDS[id].curse) return '방해 카드는 팔 수 없어요';
   if (deckOf(p).length <= RULES.sellMinDeck) return `덱이 ${RULES.sellMinDeck}장 이하라 카드를 팔 수 없어요`;
+  if ((p.sellN || 0) >= RULES.sellPerTurn) return `카드는 한 턴에 ${RULES.sellPerTurn}장까지 팔 수 있어요`;
   const got = sellPrice(id);
   p.hand.splice(i, 1);
   p.gold += got;
+  p.sellN = (p.sellN || 0) + 1;
   fx(G, uid, 'gimmick', `돈 +${got}`, { kind: 'buff' });
   log(G, `${p.name}, 카드 1장 판매 (돈 +${got})`);
   return null;
@@ -998,6 +1079,7 @@ export function privateView(G, uid, prov = G) {
     shop: G.players[uid].shop || [],
     exEn: G.players[uid].exEn || 0,
     tradeN: G.players[uid].tradeN || 0,
+    sellN: G.players[uid].sellN || 0,
     trade: G.trade && (G.trade.from === uid || G.trade.to === uid) ? G.trade : null,
   };
 }

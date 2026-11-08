@@ -6,7 +6,7 @@ const motionSource = await readFile(new URL('../js/motion.js', import.meta.url),
 const { createMotion } = await import('data:text/javascript;base64,' + Buffer.from(motionSource).toString('base64'));
 // Run the real replay loop with only DOM, sound, particle rendering and clock adapters replaced.
 const source = (await readFile(new URL('../js/replay.js', import.meta.url), 'utf8')).replace(/^import .*;\r?$/gm, '').replace('export function playReplay', 'function playReplay');
-const makeReplay = new Function('deps', `const {CURSE,cardHTML,hiddenCardHTML,replayMs,V,sfx,createMotion,document,setTimeout}=deps;\n${source}\nreturn playReplay;`);
+const makeReplay = new Function('deps', `const {CARDS,cardName,CURSE,cardHTML,hiddenCardHTML,replayMs,V,sfx,createMotion,document,setTimeout}=deps;\n${source}\nreturn playReplay;`);
 
 function setup(timer = fn => { queueMicrotask(fn); }) {
   const actions = [];
@@ -30,7 +30,7 @@ function setup(timer = fn => { queueMicrotask(fn); }) {
   field.querySelector = selector => selector.includes('"a"') ? a : selector.includes('"b"') ? b : null;
   field.querySelectorAll = () => [a, b];
   const silent = new Proxy({}, { get: () => () => {} });
-  const playReplay = makeReplay({ CURSE: 'p79', cardHTML: () => '', hiddenCardHTML: () => '', replayMs: () => 900,
+  const playReplay = makeReplay({ CARDS: {}, cardName: id => id, CURSE: 'p79', cardHTML: () => '', hiddenCardHTML: () => '', replayMs: () => 900,
     V: silent, sfx: silent, createMotion, document: { createElement: () => element() }, setTimeout: timer });
   const options = { field, shakeEl: field, players: { a: { maxHp: 40 }, b: { maxHp: 40 } }, nameOf: u => u };
   return { playReplay, options, actions, a, b };

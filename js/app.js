@@ -1,10 +1,10 @@
 import { createNet, rid } from './net.js';
 import { RULES } from './config.js';
-import { CARDS, TYPE, SCOPE } from './cards.js';
+import { CARDS, TYPE, SCOPE, RARITY } from './cards.js';
 import { Host } from './host.js';
 import { esc, cardHTML, hiddenCardHTML, avatarHTML, galleryHTML, gimmickChipsHTML, gimmickTipHTML, comebackTipHTML, keywordTipHTML } from './view.js';
-import { GIMMICKS, linkGimmicks } from './gimmicks.js';
-import { cardText, cardName, cardCost, isEdited, editCount, setCardField, resetCard, resetAll, exportJSON, exportCSV } from './editor.js';
+import { GIMMICKS } from './gimmicks.js';
+import { cardText, cardName, cardCost, cardRarity, cardBoost, origField, isEdited, editCount, setCardField, resetCard, resetAll, exportJSON, exportCSV } from './editor.js';
 import { CHARACTERS, charSVG, defaultChar, validChar, cycleChar } from './chars.js?v=sprite-paths-2';
 import { playReplay } from './replay.js';
 import { liveMotion } from './motion.js';
@@ -749,7 +749,7 @@ function onClick(e) {
     case 'edReset': {
       const id = el.dataset.id;
       resetCard(id);
-      document.querySelectorAll(`[data-edit="${id}"]`).forEach(inp => { inp.value = CARDS[id][inp.dataset.f]; });
+      document.querySelectorAll(`[data-edit="${id}"]`).forEach(inp => { inp.value = origField(id, inp.dataset.f); });
       return syncEditor(id);
     }
     case 'edResetAll':
@@ -1339,7 +1339,7 @@ function editorHTML() {
       </div>
     </div>
     <div class="modal-body">
-      <p class="soft small">카드 이름·비용·설명을 고쳐볼 수 있어요. 고친 내용은 <b>이 브라우저에만 저장</b>되고 다시 열어도 유지돼요. 게임에서 실제로 드는 에너지와 카드 효과는 바뀌지 않아요. 파일로 내보내서 전달하면 그 내용대로 반영할 수 있어요.</p>
+      <p class="soft small">카드 이름·비용·등급·역전·설명을 고쳐볼 수 있어요. 역전 배율을 따로 정하지 않으면 등급의 기본값(영웅 ×1.5, 전설 ×2)을 따라가요. 고친 내용은 <b>이 브라우저에만 저장</b>되고 다시 열어도 유지돼요. 게임에서 실제로 드는 에너지·등급·역전과 카드 효과는 바뀌지 않아요. 파일로 내보내서 전달하면 그 내용대로 반영할 수 있어요.</p>
       <div class="ed-list">${list.map(c => `<div class="ed-item ${isEdited(c.id) ? 'edited' : ''}" data-ed="${c.id}">
         ${cardHTML(c.id, { act: '', size: 'sm' })}
         <div class="ed-form">
@@ -1348,8 +1348,12 @@ function editorHTML() {
             <label class="ed-name"><span class="lbl">이름</span><input data-edit="${c.id}" data-f="name" maxlength="16" placeholder="${esc(c.name)}" value="${esc(cardName(c.id))}"></label>
             <label class="ed-cost"><span class="lbl">비용</span><input data-edit="${c.id}" data-f="cost" type="number" min="0" max="9" step="1" inputmode="numeric" placeholder="${c.cost}" value="${cardCost(c.id)}"></label>
           </div>
+          <div class="ed-row">
+            <label class="ed-rar"><span class="lbl">등급</span><select data-edit="${c.id}" data-f="rarity">${Object.entries(RARITY).map(([r, R]) => `<option value="${r}" ${cardRarity(c.id) === r ? 'selected' : ''}>${R.name}</option>`).join('')}</select></label>
+            <label class="ed-boost"><span class="lbl">역전 배율 (0 = 없음)</span><input data-edit="${c.id}" data-f="boost" type="number" min="0" max="9" step="0.5" inputmode="decimal" placeholder="${origField(c.id, 'boost')}" value="${cardBoost(c.id)}"></label>
+          </div>
           <textarea data-edit="${c.id}" data-f="text" rows="3" placeholder="${esc(c.text)}">${esc(cardText(c.id))}</textarea>
-          <div class="ed-orig"><span class="dim small">원래: ${esc(c.name)} · 비용 ${c.cost} · ${esc(c.text)}</span><button class="link-btn small" data-act="edReset" data-id="${c.id}">이 카드 되돌리기</button></div>
+          <div class="ed-orig"><span class="dim small">원래: ${esc(c.name)} · 비용 ${c.cost} · ${RARITY[c.rarity].name} · 역전 ${origField(c.id, 'boost') ? `×${origField(c.id, 'boost')}` : '없음'} · ${esc(c.text)}</span><button class="link-btn small" data-act="edReset" data-id="${c.id}">이 카드 되돌리기</button></div>
         </div>
       </div>`).join('')}</div>
     </div>
@@ -1377,11 +1381,11 @@ function econModalHTML(kind) {
     body = `<h3>${lbl('BUY')} 사기 <small>라운드마다 새로 채워져요 · 산 카드는 바로 손으로 와요</small></h3>
       <div class="shop-grid">${priv.shop.map(id => `<div class="shop-item">${cardHTML(id, { act: '', size: 'sm' })}
         <button class="btn primary" data-act="buy" data-id="${id}" ${myTurn && priv.gold >= buyPrice(id) && !S.pending ? '' : 'disabled'}>돈 ${buyPrice(id)}</button></div>`).join('') || '<p class="soft">이번 라운드 상점 카드를 모두 샀어요.</p>'}</div>
-      <h3>${lbl('SELL')} 팔기 <small>손패 카드를 산 값의 절반에 팔아요 · 예약한 카드는 팔 수 없어요</small></h3>
+      <h3>${lbl('SELL')} 팔기 <small>손패 카드를 산 값의 절반에 팔아요 · 한 턴에 ${RULES.sellPerTurn}장까지 · 예약한 카드는 팔 수 없어요</small></h3>
       <div class="shop-grid">${hand.map(c => {
-        const no = CARDS[c.id].curse || locked.includes(c.u) || priv.deck.length <= RULES.sellMinDeck;
+        const no = CARDS[c.id].curse || locked.includes(c.u) || priv.deck.length <= RULES.sellMinDeck || priv.sellN >= RULES.sellPerTurn;
         return `<div class="shop-item">${cardHTML(c.id, { act: '', size: 'sm' })}
-        <button class="btn ghost" data-act="sell" data-u="${c.u}" ${myTurn && !no && !S.pending ? '' : 'disabled'}>${CARDS[c.id].curse ? '못 팔아요' : locked.includes(c.u) ? '거래 중' : priv.deck.length <= RULES.sellMinDeck ? '덱 부족' : `+${sellPrice(c.id)}`}</button></div>`;
+        <button class="btn ghost" data-act="sell" data-u="${c.u}" ${myTurn && !no && !S.pending ? '' : 'disabled'}>${CARDS[c.id].curse ? '못 팔아요' : locked.includes(c.u) ? '거래 중' : priv.deck.length <= RULES.sellMinDeck ? '덱 부족' : priv.sellN >= RULES.sellPerTurn ? '이번 턴 판매 끝' : `+${sellPrice(c.id)}`}</button></div>`;
       }).join('') || '<p class="soft">팔 수 있는 손패가 없어요.</p>'}</div>`;
   } else if (kind === 'exchange') {
     const { from, to, k } = S.ex, r = exRate(from, to), give = r.give * k, get = r.get * k;
@@ -1632,11 +1636,12 @@ function syncEditor(id) {
   const item = document.querySelector(`.ed-item[data-ed="${id}"]`);
   if (item) {
     item.classList.toggle('edited', isEdited(id));
-    const set = (sel, v) => { const t = item.querySelector(sel); if (t) t.textContent = v; };
-    set('.card .cname', cardName(id));
-    set('.card .cost', cardCost(id));
-    const t = item.querySelector('.card .ctext');
-    if (t) t.innerHTML = linkGimmicks(esc(cardText(id)));
+    // 미리보기 카드는 통째로 다시 그린다 (등급 표시·역전 표시까지 바뀌므로)
+    const card = item.querySelector('.card');
+    if (card) card.outerHTML = cardHTML(id, { act: '', size: 'sm' });
+    // 등급을 바꾸면 따로 고치지 않은 역전 배율은 그 등급의 기본값을 따라간다
+    const b = item.querySelector('[data-f="boost"]');
+    if (b && document.activeElement !== b) b.value = cardBoost(id);
   }
   const n = document.querySelector('.ed-count b');
   if (n) n.textContent = editCount();
