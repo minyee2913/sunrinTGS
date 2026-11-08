@@ -265,6 +265,16 @@ function turnStartGimmicks(G, p) {
     fx(G, p.uid, 'gimmick', `${gname('slow')}: 드로우 -${n}`, { g: 'slow', kind: 'debuff' });
     log(G, `${p.name}의 ${gname('slow')}: 드로우 -${n}`);
   }
+  // 왕짱: 미리 뽑아 둔 손패에 중첩 수만큼 더 뽑는다 (손패 상한 안에서)
+  if (st.wangjjang) {
+    const before = p.hand.length;
+    draw(G, p, st.wangjjang);
+    const n = p.hand.length - before;
+    if (n) {
+      fx(G, p.uid, 'gimmick', `${gname('wangjjang')}: 드로우 +${n}`, { g: 'wangjjang', kind: 'buff' });
+      log(G, `${p.name}의 ${gname('wangjjang')}: 드로우 +${n}`);
+    }
+  }
   const fresh = p.stNew || {};
   for (const id of Object.keys(st)) {
     if (GIMMICKS[id].keep) continue; // 예?·엄·티~원은 줄지 않는다
@@ -471,7 +481,9 @@ export function isBehind(G, p) {
 function makeCtx(G, p, card, target) {
   const others = () => othersOf(G, p);
   const pickRandom = list => list[Math.floor(rand(G) * list.length)] || null;
-  const boost = RARITY[card.rarity]?.boost && isBehind(G, p) ? RARITY[card.rarity].boost : 1;
+  // 역전 배율: 카드에 따로 정한 값(card.boost)이 있으면 그것, 없으면 등급 기본값
+  const mult = card.boost ?? RARITY[card.rarity]?.boost;
+  const boost = mult && isBehind(G, p) ? mult : 1;
   // 역전 배율. 알빠노를 가진 다른 사람(t)에게는 원래 수치로 적용한다.
   const B = (n, t = null) => (boost === 1 || !n || (t && t !== p && t.st.alppano) ? n : Math.sign(n) * Math.ceil(Math.abs(n) * boost));
   const c = {
@@ -559,6 +571,14 @@ function makeCtx(G, p, card, target) {
     },
     // 이 턴이 끝나면 바로 내 추가 턴 (회방 카드용)
     extraTurn: () => { (G.extra ||= []).push(p.uid); fx(G, p.uid, 'gimmick', '추가 턴 예약!', { kind: 'buff' }); },
+    // 모든 순서를 무작위로. 이번 라운드에 이미 턴을 한 사람(turnIdx까지)과 아직 안 한 사람을 따로 섞어서
+    // 이번 라운드에 두 번 하거나 건너뛰는 사람이 없게 한다. 다음 라운드부터는 새 순서 그대로.
+    shuffleOrder: () => {
+      const cut = G.turnIdx + 1;
+      G.order = [...shuffle(G, G.order.slice(0, cut)), ...shuffle(G, G.order.slice(cut))];
+      for (const u of G.order) if (P(G, u).alive) fx(G, u, 'gimmick', '순서 뒤섞임!', { kind: 'mixed' });
+      log(G, `${p.name}, 순서를 뒤섞었다: ${G.order.filter(u => P(G, u).alive).map(u => P(G, u).name).join(' → ')}`, 'sys');
+    },
     draw: n => draw(G, p, B(n)),
     gainEnergy: n => { p.energy += B(n); },
     energyPenalty: t => { if (t?.alive) { t.enPen = 1; fx(G, t.uid, 'debuff', '에너지 -1'); } },

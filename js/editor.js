@@ -13,6 +13,7 @@ let edits = (() => {
       if (typeof o[id] === 'string') o[id] = { text: o[id] };
       // 반영된 수정은 이제 원래 값과 같으므로 지운다
       for (const f of ['name', 'cost', 'text', 'rarity']) if (o[id][f] === CARDS[id][f]) delete o[id][f];
+      if ('boost' in o[id] && o[id].boost === defBoost(id, o[id].rarity ?? CARDS[id].rarity)) delete o[id].boost;
       if (!Object.keys(o[id]).length) delete o[id];
     }
     return o;
@@ -25,10 +26,12 @@ export const cardText = id => field(id, 'text');
 export const cardName = id => field(id, 'name');
 export const cardCost = id => field(id, 'cost');
 export const cardRarity = id => field(id, 'rarity');
-export const rarityBoost = r => RARITY[r]?.boost || 0;
-export const cardBoost = id => edits[id]?.boost ?? rarityBoost(cardRarity(id));
+export function rarityBoost(r) { return RARITY[r]?.boost || 0; }
+// 등급 r일 때 이 카드의 기본 역전 배율. 원래 등급이면 카드에 따로 정한 값(boost)을 따른다.
+function defBoost(id, r) { return r === CARDS[id].rarity && CARDS[id].boost != null ? CARDS[id].boost : rarityBoost(r); }
+export const cardBoost = id => edits[id]?.boost ?? defBoost(id, cardRarity(id));
 // 수정 전 값 (되돌리기·원래 값 표시용)
-export const origField = (id, f) => (f === 'boost' ? rarityBoost(CARDS[id].rarity) : CARDS[id][f]);
+export const origField = (id, f) => (f === 'boost' ? defBoost(id, CARDS[id].rarity) : CARDS[id][f]);
 export const isEdited = id => id in edits;
 export const editCount = () => Object.keys(edits).length;
 
@@ -40,10 +43,10 @@ export function setCardField(id, f, v) {
   else if (v.trim() === '') v = null;
   const e = edits[id] || {};
   // 역전은 지금 등급의 기본 배율과 같으면 따로 저장하지 않는다
-  const base = f === 'boost' ? rarityBoost(e.rarity ?? CARDS[id].rarity) : CARDS[id][f];
+  const base = f === 'boost' ? defBoost(id, e.rarity ?? CARDS[id].rarity) : CARDS[id][f];
   if (v === null || v === base) delete e[f];
   else e[f] = v;
-  if (f === 'rarity' && e.boost === rarityBoost(e.rarity ?? CARDS[id].rarity)) delete e.boost;
+  if (f === 'rarity' && e.boost === defBoost(id, e.rarity ?? CARDS[id].rarity)) delete e.boost;
   if (Object.keys(e).length) edits[id] = e;
   else delete edits[id];
   save();

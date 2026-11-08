@@ -27,6 +27,8 @@ export const GIMMICKS = {
     desc: '다음 턴까지 데미지를 받지 않으면 체력 10 회복' },
   hush: { name: '쉿', kind: 'buff', short: '쉿',
     desc: '자신이 가진 기믹 모두에게 숨기기' },
+  wangjjang: { name: '왕짱', kind: 'buff', short: '왕',
+    desc: '드로우 카드 1장 증가' },
   alppano: { name: '알빠노', kind: 'buff', short: '알',
     desc: '역전 효과를 무시한다 (상대가 역전으로 키운 피해·기믹 등을 원래 수치로 받는다)' },
   paradise: { name: '낙원', kind: 'mixed', short: '낙',
