@@ -34,6 +34,7 @@ export const RULES = {
   // 돈
   startGold: 10,
   roundGold: 3,       // 라운드가 끝날 때마다 살아 있는 사람에게 주는 돈
+  sellMinDeck: 4,     // 덱이 이 장수 이하면 카드를 팔 수 없다
   exRate: { hp: 1, gold: 1, en: 3 }, // 환전 가치: 에너지 1 = 체력 3 = 돈 3
   exEnergyMax: 3,     // 한 턴에 환전으로 얻을 수 있는 에너지
   shopSize: 4,        // 상점에 놓이는 카드 수 (라운드마다 새로 채운다)

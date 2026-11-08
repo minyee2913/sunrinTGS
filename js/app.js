@@ -1379,9 +1379,9 @@ function econModalHTML(kind) {
         <button class="btn primary" data-act="buy" data-id="${id}" ${myTurn && priv.gold >= buyPrice(id) && !S.pending ? '' : 'disabled'}>돈 ${buyPrice(id)}</button></div>`).join('') || '<p class="soft">이번 라운드 상점 카드를 모두 샀어요.</p>'}</div>
       <h3>${lbl('SELL')} 팔기 <small>손패 카드를 산 값의 절반에 팔아요 · 예약한 카드는 팔 수 없어요</small></h3>
       <div class="shop-grid">${hand.map(c => {
-        const no = CARDS[c.id].curse || locked.includes(c.u);
+        const no = CARDS[c.id].curse || locked.includes(c.u) || priv.deck.length <= RULES.sellMinDeck;
         return `<div class="shop-item">${cardHTML(c.id, { act: '', size: 'sm' })}
-        <button class="btn ghost" data-act="sell" data-u="${c.u}" ${myTurn && !no && !S.pending ? '' : 'disabled'}>${CARDS[c.id].curse ? '못 팔아요' : locked.includes(c.u) ? '거래 중' : `+${sellPrice(c.id)}`}</button></div>`;
+        <button class="btn ghost" data-act="sell" data-u="${c.u}" ${myTurn && !no && !S.pending ? '' : 'disabled'}>${CARDS[c.id].curse ? '못 팔아요' : locked.includes(c.u) ? '거래 중' : priv.deck.length <= RULES.sellMinDeck ? '덱 부족' : `+${sellPrice(c.id)}`}</button></div>`;
       }).join('') || '<p class="soft">팔 수 있는 손패가 없어요.</p>'}</div>`;
   } else if (kind === 'exchange') {
     const { from, to, k } = S.ex, r = exRate(from, to), give = r.give * k, get = r.get * k;

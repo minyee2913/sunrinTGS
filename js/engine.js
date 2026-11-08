@@ -763,7 +763,7 @@ export function sellCard(G, uid, cardU) {
   if (inTrade(G, uid, cardU)) return '거래에 내놓은 카드는 팔 수 없어요';
   const id = p.hand[i].id;
   if (CARDS[id].curse) return '방해 카드는 팔 수 없어요';
-  if (deckOf(p).length <= RULES.minDeck) return `덱은 ${RULES.minDeck}장보다 적어질 수 없어요`;
+  if (deckOf(p).length <= RULES.sellMinDeck) return `덱이 ${RULES.sellMinDeck}장 이하라 카드를 팔 수 없어요`;
   const got = sellPrice(id);
   p.hand.splice(i, 1);
   p.gold += got;
